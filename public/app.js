@@ -1208,16 +1208,21 @@ const app = {
                 const data = await res.json();
                 if (data?.odoo?.name) {
                     alert(`Visita registrada ✅\nDocumento Odoo: ${data.odoo.name}\nEstado pago: ${data.odoo.payment_state || 'pendiente'}`);
+                } else if (data?.odoo_error) {
+                    alert(`Visita registrada ✅\nPero Odoo falló al emitir el documento:\n${data.odoo_error}\n\n(Quedó pendiente de emisión)`);
                 } else {
                     alert('Visita registrada correctamente');
                 }
                 this.cargarAsignaciones();
             } else {
-                alert('Error al registrar la visita');
+                const errJson = await res.json().catch(() => null);
+                const msg = errJson?.error || `HTTP ${res.status}`;
+                console.error('Error al registrar visita:', errJson || msg);
+                alert(`Error al registrar la visita: ${msg}`);
             }
         } catch (error) {
             console.error('Error registrando visita:', error);
-            alert('Error al registrar la visita');
+            alert(`Error al registrar la visita: ${error?.message || error}`);
         }
     }
 };

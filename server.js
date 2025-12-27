@@ -482,35 +482,48 @@ app.post('/api/visitas', requireAuth, async (req, res) => {
 
     // Emitir documento en Odoo al registrar visita (solo admin, por ahora)
     let odooResult = null;
+    let odooError = null;
     if (req.isAdmin) {
       const cliente = db.obtenerClientePorId(cliente_id);
       if (cliente) {
-        // Sync partner
-        const { partnerId } = await odoo.upsertPartnerFromCliente(cliente);
-        db.actualizarCliente(cliente_id, {
-          odoo_partner_id: partnerId,
-          odoo_last_sync: new Date().toISOString()
-        });
+        try {
+          // Sync partner
+          const { partnerId } = await odoo.upsertPartnerFromCliente(cliente);
+          db.actualizarCliente(cliente_id, {
+            odoo_partner_id: partnerId,
+            odoo_last_sync: new Date().toISOString()
+          });
 
-        // Crear invoice/boleta/factura según documento_tipo del cliente
-        odooResult = await odoo.createInvoiceForVisit({
-          cliente,
-          visita: { id, fecha_visita, precio },
-          partnerId
-        });
+          // Crear invoice/boleta/factura según documento_tipo del cliente
+          odooResult = await odoo.createInvoiceForVisit({
+            cliente,
+            visita: { id, fecha_visita, precio },
+            partnerId
+          });
 
-        // Guardar referencia en la visita
-        db.actualizarVisita(id, {
-          odoo_move_id: odooResult.moveId,
-          odoo_move_name: odooResult.name,
-          odoo_payment_state: odooResult.payment_state,
-          odoo_last_sync: new Date().toISOString()
-        });
+          // Guardar referencia en la visita
+          db.actualizarVisita(id, {
+            odoo_move_id: odooResult.moveId,
+            odoo_move_name: odooResult.name,
+            odoo_payment_state: odooResult.payment_state,
+            odoo_last_sync: new Date().toISOString(),
+            odoo_error: null
+          });
+        } catch (e) {
+          odooError = e?.message || String(e);
+          console.error('[Odoo] Error emitiendo documento para visita', id, odooError);
+          db.actualizarVisita(id, {
+            odoo_last_sync: new Date().toISOString(),
+            odoo_error: odooError
+          });
+        }
       }
     }
 
-    res.json({ id, success: true, odoo: odooResult });
+    // Siempre devolver success=true: la visita ya quedó registrada; si Odoo falló, devolvemos el motivo.
+    res.json({ id, success: true, odoo: odooResult, odoo_error: odooError });
   } catch (error) {
+    console.error('[API] Error registrando visita:', error);
     res.status(500).json({ error: error.message });
   }
 });
