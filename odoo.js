@@ -128,6 +128,45 @@ async function getProductIdForService() {
   return variantId;
 }
 
+async function journalExists(journalId) {
+  try {
+    const res = await executeKw({
+      model: 'account.journal',
+      method: 'read',
+      args: [[journalId], ['id', 'name', 'type', 'active']]
+    });
+    return Array.isArray(res) && res.length > 0;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function findJournalIdByName({ name, type = null }) {
+  const domain = [];
+  if (name) domain.push(['name', '=', name]);
+  if (type) domain.push(['type', '=', type]);
+  const ids = await executeKw({
+    model: 'account.journal',
+    method: 'search',
+    args: [domain],
+    kwargs: { limit: 1 }
+  });
+  return Array.isArray(ids) && ids.length > 0 ? ids[0] : null;
+}
+
+async function findJournalIdByNameLike({ nameLike, type = null }) {
+  const domain = [];
+  if (nameLike) domain.push(['name', 'ilike', nameLike]);
+  if (type) domain.push(['type', '=', type]);
+  const ids = await executeKw({
+    model: 'account.journal',
+    method: 'search',
+    args: [domain],
+    kwargs: { limit: 1 }
+  });
+  return Array.isArray(ids) && ids.length > 0 ? ids[0] : null;
+}
+
 async function getJournalIdForTipo(documentoTipo) {
   const tipo = mapDocumentoTipo(documentoTipo);
 
@@ -142,9 +181,43 @@ async function getJournalIdForTipo(documentoTipo) {
     return parseInt(process.env.ODOO_JOURNAL_INVOICE_ID, 10);
   }
 
-  // Defaults según tu configuración
-  if (tipo === 'boleta') return 39;   // Diario boletas
-  if (tipo === 'factura') return 33;  // Diario ventas (facturas)
+  // Defaults según tu configuración (validando que existan)
+  if (tipo === 'boleta') {
+    const defaultId = 39;
+    if (await journalExists(defaultId)) return defaultId;
+
+    // Fallback: buscar por nombre exacto o aproximado
+    const byName =
+      (process.env.ODOO_JOURNAL_BOLETA_NAME
+        ? await findJournalIdByName({ name: process.env.ODOO_JOURNAL_BOLETA_NAME, type: 'sale' })
+        : null) ||
+      (await findJournalIdByNameLike({ nameLike: 'Boleta', type: 'sale' })) ||
+      (await findJournalIdByNameLike({ nameLike: 'Boletas', type: 'sale' }));
+
+    if (byName) return byName;
+    throw new Error(
+      `No se encontró el diario para Boleta. El ID ${defaultId} no existe/ no es accesible. ` +
+      `Configura ODOO_JOURNAL_BOLETA_ID o ODOO_JOURNAL_BOLETA_NAME`
+    );
+  }
+
+  if (tipo === 'factura') {
+    const defaultId = 33;
+    if (await journalExists(defaultId)) return defaultId;
+
+    const byName =
+      (process.env.ODOO_JOURNAL_FACTURA_NAME
+        ? await findJournalIdByName({ name: process.env.ODOO_JOURNAL_FACTURA_NAME, type: 'sale' })
+        : null) ||
+      (await findJournalIdByNameLike({ nameLike: 'Ventas', type: 'sale' })) ||
+      (await findJournalIdByNameLike({ nameLike: 'Sale', type: 'sale' }));
+
+    if (byName) return byName;
+    throw new Error(
+      `No se encontró el diario para Factura. El ID ${defaultId} no existe/ no es accesible. ` +
+      `Configura ODOO_JOURNAL_FACTURA_ID o ODOO_JOURNAL_FACTURA_NAME`
+    );
+  }
 
   // Invoice: buscar por nombre "Documento Interno"
   const invoiceJournalName = process.env.ODOO_JOURNAL_INVOICE_NAME || 'Documento Interno';
