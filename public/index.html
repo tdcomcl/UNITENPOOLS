@@ -69,6 +69,12 @@
             <div class="filters-panel">
                 <div class="filters">
                     <input type="text" id="cliente-search" placeholder="Buscar cliente..." onkeyup="app.filtrarClientes()">
+                    <select id="documento-filter" onchange="app.filtrarClientes()">
+                        <option value="">Todos los documentos</option>
+                        <option value="invoice">Invoice</option>
+                        <option value="boleta">Boleta</option>
+                        <option value="factura">Factura</option>
+                    </select>
                     <select id="responsable-filter" onchange="app.filtrarClientes()">
                         <option value="">Todos los responsables</option>
                     </select>
@@ -374,7 +380,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=6.5"></script>
+    <script src="app.js?v=6.6"></script>
 </body>
 </html>
 

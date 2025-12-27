@@ -405,6 +405,7 @@ const app = {
         }
         
         const search = document.getElementById('cliente-search')?.value.toLowerCase() || '';
+        const documento = document.getElementById('documento-filter')?.value || '';
         const responsableId = document.getElementById('responsable-filter')?.value || '';
         const comuna = document.getElementById('comuna-filter')?.value || '';
         const dia = document.getElementById('dia-filter')?.value || '';
@@ -435,6 +436,11 @@ const app = {
             filtered = filtered.filter(c => c.comuna === comuna);
         }
         
+        // Filtro por tipo de documento
+        if (documento) {
+            filtered = filtered.filter(c => (c.documento_tipo || 'invoice') === documento);
+        }
+
         // Filtro por día
         if (dia) {
             filtered = filtered.filter(c => c.dia_atencion === dia);
