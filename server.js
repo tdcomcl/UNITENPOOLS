@@ -3,6 +3,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
 const session = require('express-session');
+const SQLiteStore = require('connect-sqlite3')(session);
 const db = require('./database');
 
 const app = express();
@@ -16,8 +17,12 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Configurar sesiones
+// Configurar sesiones con SQLite Store (mejor para producción)
 app.use(session({
+  store: new SQLiteStore({
+    db: 'sessions.db',
+    dir: './sessions'
+  }),
   secret: 'piscinas-secret-key-change-in-production',
   resave: false,
   saveUninitialized: false,

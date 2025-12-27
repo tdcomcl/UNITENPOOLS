@@ -15,6 +15,9 @@ ENV/
 *.sqlite
 *.sqlite3
 
+# Sesiones
+sessions/
+
 # Python (legacy)
 __pycache__/
 *.py[cod]
