@@ -1013,10 +1013,8 @@ const app = {
     actualizarCamposDocumento() {
         const tipo = document.getElementById('cliente-documento-tipo')?.value || 'boleta';
         const facturaFields = document.getElementById('factura-fields');
-        const invoiceFields = document.getElementById('invoice-fields');
 
         if (facturaFields) facturaFields.style.display = tipo === 'factura' ? 'block' : 'none';
-        if (invoiceFields) invoiceFields.style.display = tipo === 'invoice' ? 'block' : 'none';
     },
 
     async guardarCliente(e) {
@@ -1041,6 +1039,7 @@ const app = {
             alert('Falta Correo electrónico (necesario para emitir documentos)');
             return;
         }
+        // Invoice: usamos los datos base del cliente (rut opcional). Boleta/Factura: rut requerido.
         if (documentoTipo !== 'invoice' && !rut) {
             alert('Falta RUT (necesario para Boleta/Factura)');
             return;
@@ -1054,22 +1053,9 @@ const app = {
         const factura_comuna = document.getElementById('factura-comuna')?.value?.trim() || '';
         const factura_email = document.getElementById('factura-email')?.value?.trim() || '';
 
-        const invoice_nombre = document.getElementById('invoice-nombre')?.value?.trim() || '';
-        const invoice_tax_id = document.getElementById('invoice-tax-id')?.value?.trim() || '';
-        const invoice_direccion = document.getElementById('invoice-direccion')?.value?.trim() || '';
-        const invoice_comuna = document.getElementById('invoice-comuna')?.value?.trim() || '';
-        const invoice_email = document.getElementById('invoice-email')?.value?.trim() || '';
-        const invoice_pais = document.getElementById('invoice-pais')?.value?.trim() || '';
-
         if (documentoTipo === 'factura') {
             if (!factura_razon_social || !factura_rut || !factura_direccion || !factura_comuna || !factura_email) {
                 alert('Para Factura electrónica faltan datos (Razón social, RUT, Dirección, Comuna, Correo).');
-                return;
-            }
-        }
-        if (documentoTipo === 'invoice') {
-            if (!invoice_nombre || !invoice_direccion || !invoice_email) {
-                alert('Para Invoice faltan datos (Nombre/Empresa, Dirección, Correo).');
                 return;
             }
         }
@@ -1089,13 +1075,6 @@ const app = {
             factura_direccion: documentoTipo === 'factura' ? factura_direccion : null,
             factura_comuna: documentoTipo === 'factura' ? factura_comuna : null,
             factura_email: documentoTipo === 'factura' ? factura_email : null,
-            // Invoice
-            invoice_nombre: documentoTipo === 'invoice' ? invoice_nombre : null,
-            invoice_tax_id: documentoTipo === 'invoice' ? invoice_tax_id : null,
-            invoice_direccion: documentoTipo === 'invoice' ? invoice_direccion : null,
-            invoice_comuna: documentoTipo === 'invoice' ? invoice_comuna : null,
-            invoice_email: documentoTipo === 'invoice' ? invoice_email : null,
-            invoice_pais: documentoTipo === 'invoice' ? invoice_pais : null,
             // Operación
             responsable_id: document.getElementById('cliente-responsable').value || null,
             dia_atencion: document.getElementById('cliente-dia').value || null,
@@ -1154,13 +1133,6 @@ const app = {
         if (document.getElementById('factura-direccion')) document.getElementById('factura-direccion').value = cliente.factura_direccion || '';
         if (document.getElementById('factura-comuna')) document.getElementById('factura-comuna').value = cliente.factura_comuna || '';
         if (document.getElementById('factura-email')) document.getElementById('factura-email').value = cliente.factura_email || '';
-        // Invoice
-        if (document.getElementById('invoice-nombre')) document.getElementById('invoice-nombre').value = cliente.invoice_nombre || '';
-        if (document.getElementById('invoice-tax-id')) document.getElementById('invoice-tax-id').value = cliente.invoice_tax_id || '';
-        if (document.getElementById('invoice-direccion')) document.getElementById('invoice-direccion').value = cliente.invoice_direccion || '';
-        if (document.getElementById('invoice-comuna')) document.getElementById('invoice-comuna').value = cliente.invoice_comuna || '';
-        if (document.getElementById('invoice-email')) document.getElementById('invoice-email').value = cliente.invoice_email || '';
-        if (document.getElementById('invoice-pais')) document.getElementById('invoice-pais').value = cliente.invoice_pais || '';
 
         document.getElementById('cliente-responsable').value = cliente.responsable_id || '';
         document.getElementById('cliente-dia').value = cliente.dia_atencion || '';
