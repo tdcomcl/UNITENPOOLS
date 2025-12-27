@@ -128,17 +128,37 @@ async function getProductIdForService() {
   return variantId;
 }
 
-async function getSaleJournalId() {
-  const envId = process.env.ODOO_SALES_JOURNAL_ID;
-  if (envId) return parseInt(envId, 10);
+async function getJournalIdForTipo(documentoTipo) {
+  const tipo = mapDocumentoTipo(documentoTipo);
+
+  // Permitir override por variables de entorno
+  if (tipo === 'boleta' && process.env.ODOO_JOURNAL_BOLETA_ID) {
+    return parseInt(process.env.ODOO_JOURNAL_BOLETA_ID, 10);
+  }
+  if (tipo === 'factura' && process.env.ODOO_JOURNAL_FACTURA_ID) {
+    return parseInt(process.env.ODOO_JOURNAL_FACTURA_ID, 10);
+  }
+  if (tipo === 'invoice' && process.env.ODOO_JOURNAL_INVOICE_ID) {
+    return parseInt(process.env.ODOO_JOURNAL_INVOICE_ID, 10);
+  }
+
+  // Defaults según tu configuración
+  if (tipo === 'boleta') return 39;   // Diario boletas
+  if (tipo === 'factura') return 33;  // Diario ventas (facturas)
+
+  // Invoice: buscar por nombre "Documento Interno"
+  const invoiceJournalName = process.env.ODOO_JOURNAL_INVOICE_NAME || 'Documento Interno';
   const ids = await executeKw({
     model: 'account.journal',
     method: 'search',
-    args: [[['type', '=', 'sale']]],
+    args: [[['name', '=', invoiceJournalName]]],
     kwargs: { limit: 1 }
   });
   if (!Array.isArray(ids) || ids.length === 0) {
-    throw new Error('No se encontró un journal de ventas en Odoo. Configura ODOO_SALES_JOURNAL_ID');
+    throw new Error(
+      `No se encontró el diario '${invoiceJournalName}' para Invoice. ` +
+      `Configura ODOO_JOURNAL_INVOICE_ID o ODOO_JOURNAL_INVOICE_NAME`
+    );
   }
   return ids[0];
 }
@@ -166,7 +186,7 @@ function mapDocumentoTipo(clienteDocumentoTipo) {
 }
 
 async function createInvoiceForVisit({ cliente, visita, partnerId }) {
-  const journalId = await getSaleJournalId();
+  const journalId = await getJournalIdForTipo(cliente.documento_tipo);
   const productId = await getProductIdForService();
 
   const tipo = mapDocumentoTipo(cliente.documento_tipo);
