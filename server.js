@@ -460,7 +460,7 @@ app.get('/api/clientes/:id/visitas', requireAuth, (req, res) => {
   }
 });
 
-app.post('/api/visitas', requireAuth, (req, res) => {
+app.post('/api/visitas', requireAuth, async (req, res) => {
   try {
     const { cliente_id, fecha_visita, responsable_id, precio, realizada } = req.body;
     if (!cliente_id || !fecha_visita) {
@@ -479,7 +479,37 @@ app.post('/api/visitas', requireAuth, (req, res) => {
     }
     
     const id = db.registrarVisita(cliente_id, fecha_visita, responsableIdFinal, precio, realizada !== false);
-    res.json({ id, success: true });
+
+    // Emitir documento en Odoo al registrar visita (solo admin, por ahora)
+    let odooResult = null;
+    if (req.isAdmin) {
+      const cliente = db.obtenerClientePorId(cliente_id);
+      if (cliente) {
+        // Sync partner
+        const { partnerId } = await odoo.upsertPartnerFromCliente(cliente);
+        db.actualizarCliente(cliente_id, {
+          odoo_partner_id: partnerId,
+          odoo_last_sync: new Date().toISOString()
+        });
+
+        // Crear invoice/boleta/factura según documento_tipo del cliente
+        odooResult = await odoo.createInvoiceForVisit({
+          cliente,
+          visita: { id, fecha_visita, precio },
+          partnerId
+        });
+
+        // Guardar referencia en la visita
+        db.actualizarVisita(id, {
+          odoo_move_id: odooResult.moveId,
+          odoo_move_name: odooResult.name,
+          odoo_payment_state: odooResult.payment_state,
+          odoo_last_sync: new Date().toISOString()
+        });
+      }
+    }
+
+    res.json({ id, success: true, odoo: odooResult });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

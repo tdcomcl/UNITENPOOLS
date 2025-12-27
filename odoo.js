@@ -85,10 +85,110 @@ async function upsertPartnerFromCliente(cliente) {
   return { partnerId, action: 'created' };
 }
 
+async function getSaleJournalId() {
+  const envId = process.env.ODOO_SALES_JOURNAL_ID;
+  if (envId) return parseInt(envId, 10);
+  const ids = await executeKw({
+    model: 'account.journal',
+    method: 'search',
+    args: [[['type', '=', 'sale']]],
+    kwargs: { limit: 1 }
+  });
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new Error('No se encontró un journal de ventas en Odoo. Configura ODOO_SALES_JOURNAL_ID');
+  }
+  return ids[0];
+}
+
+async function getIncomeAccountId() {
+  const envId = process.env.ODOO_INCOME_ACCOUNT_ID;
+  if (envId) return parseInt(envId, 10);
+  const ids = await executeKw({
+    model: 'account.account',
+    method: 'search',
+    args: [[['account_type', '=', 'income'], ['deprecated', '=', false]]],
+    kwargs: { limit: 1 }
+  });
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new Error('No se encontró una cuenta de ingresos en Odoo. Configura ODOO_INCOME_ACCOUNT_ID');
+  }
+  return ids[0];
+}
+
+function mapDocumentoTipo(clienteDocumentoTipo) {
+  const tipo = (clienteDocumentoTipo || 'invoice').toLowerCase();
+  if (tipo === 'factura') return 'factura';
+  if (tipo === 'boleta') return 'boleta';
+  return 'invoice';
+}
+
+async function createInvoiceForVisit({ cliente, visita, partnerId }) {
+  const journalId = await getSaleJournalId();
+  const incomeAccountId = await getIncomeAccountId();
+
+  const tipo = mapDocumentoTipo(cliente.documento_tipo);
+  const moveType = 'out_invoice';
+
+  const lineName = (process.env.ODOO_SERVICE_NAME || 'Mantención piscina');
+  const priceUnit = Number(visita.precio ?? cliente.precio_por_visita ?? 0) || 0;
+
+  const moveVals = {
+    move_type: moveType,
+    partner_id: partnerId,
+    journal_id: journalId,
+    invoice_date: visita.fecha_visita,
+    ref: `Visita ${visita.id} - Cliente ${cliente.id}`,
+    invoice_line_ids: [[0, 0, {
+      name: lineName,
+      quantity: 1,
+      price_unit: priceUnit,
+      account_id: incomeAccountId
+    }]]
+  };
+
+  // Si tienes IDs específicos para documentos (Latam), puedes configurarlos por env.
+  // Nota: esto depende de módulos de localización instalados en Odoo.
+  if (tipo === 'factura' && process.env.ODOO_DOC_TYPE_FACTURA_ID) {
+    moveVals.l10n_latam_document_type_id = parseInt(process.env.ODOO_DOC_TYPE_FACTURA_ID, 10);
+  }
+  if (tipo === 'boleta' && process.env.ODOO_DOC_TYPE_BOLETA_ID) {
+    moveVals.l10n_latam_document_type_id = parseInt(process.env.ODOO_DOC_TYPE_BOLETA_ID, 10);
+  }
+
+  const moveId = await executeKw({
+    model: 'account.move',
+    method: 'create',
+    args: [moveVals]
+  });
+
+  // Postear para que quede "pendiente de pago" (not_paid) si no se registra pago
+  await executeKw({
+    model: 'account.move',
+    method: 'action_post',
+    args: [[moveId]]
+  });
+
+  const [move] = await executeKw({
+    model: 'account.move',
+    method: 'read',
+    args: [[moveId], ['name', 'state', 'payment_state', 'amount_total', 'invoice_date']]
+  });
+
+  return {
+    moveId,
+    name: move?.name,
+    state: move?.state,
+    payment_state: move?.payment_state,
+    amount_total: move?.amount_total,
+    invoice_date: move?.invoice_date
+  };
+}
+
 module.exports = {
   getOdooConfig,
   testConnection,
-  upsertPartnerFromCliente
+  upsertPartnerFromCliente,
+  createInvoiceForVisit
 };
 
 

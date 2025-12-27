@@ -116,11 +116,21 @@ class PiscinasDB {
         precio REAL,
         realizada INTEGER DEFAULT 0,
         notas TEXT,
+        odoo_move_id INTEGER,
+        odoo_move_name TEXT,
+        odoo_payment_state TEXT,
+        odoo_last_sync TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (cliente_id) REFERENCES clientes(id),
         FOREIGN KEY (responsable_id) REFERENCES responsables(id)
       )
     `);
+
+    // Migración segura para visitas
+    this.ensureColumn('visitas', 'odoo_move_id', 'odoo_move_id INTEGER');
+    this.ensureColumn('visitas', 'odoo_move_name', 'odoo_move_name TEXT');
+    this.ensureColumn('visitas', 'odoo_payment_state', 'odoo_payment_state TEXT');
+    this.ensureColumn('visitas', 'odoo_last_sync', 'odoo_last_sync TEXT');
 
     // Tabla de asignaciones semanales
     this.db.exec(`
@@ -420,6 +430,21 @@ class PiscinasDB {
     `);
     const info = stmt.run(cliente_id, fecha_visita, responsable_id, precio, realizada ? 1 : 0);
     return info.lastInsertRowid;
+  }
+
+  actualizarVisita(id, updates) {
+    const fields = [];
+    const values = [];
+    Object.keys(updates).forEach(key => {
+      if (updates[key] !== undefined) {
+        fields.push(`${key} = ?`);
+        values.push(updates[key]);
+      }
+    });
+    if (fields.length === 0) return;
+    values.push(id);
+    const query = `UPDATE visitas SET ${fields.join(', ')} WHERE id = ?`;
+    this.db.prepare(query).run(...values);
   }
 
   obtenerVisitasCliente(cliente_id, limit = 10) {

@@ -1205,7 +1205,12 @@ const app = {
 
             if (res.ok) {
                 this.closeModal('visita-modal');
-                alert('Visita registrada correctamente');
+                const data = await res.json();
+                if (data?.odoo?.name) {
+                    alert(`Visita registrada ✅\nDocumento Odoo: ${data.odoo.name}\nEstado pago: ${data.odoo.payment_state || 'pendiente'}`);
+                } else {
+                    alert('Visita registrada correctamente');
+                }
                 this.cargarAsignaciones();
             } else {
                 alert('Error al registrar la visita');
