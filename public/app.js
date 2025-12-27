@@ -308,13 +308,19 @@ const app = {
         const isAdmin = this.currentUser?.rol === 'admin';
 
         if (clientes.length === 0) {
-            const colspan = isAdmin ? '8' : '3';
+            const colspan = isAdmin ? '9' : '3';
             tbody.innerHTML = `<tr><td colspan="${colspan}" class="empty-state">No hay clientes registrados</td></tr>`;
             return;
         }
 
         if (isAdmin) {
             // Vista completa para admin
+            const docLabel = (tipo) => {
+                const t = (tipo || 'boleta').toLowerCase();
+                if (t === 'factura') return 'Factura';
+                if (t === 'invoice') return 'Invoice';
+                return 'Boleta';
+            };
             tbody.innerHTML = clientes.map(cliente => `
                 <tr>
                     <td>
@@ -323,6 +329,7 @@ const app = {
                     <td>${cliente.id}</td>
                     <td><strong>${cliente.nombre}</strong></td>
                     <td>${cliente.comuna || '-'}</td>
+                    <td><span class="tag tag-info">${docLabel(cliente.documento_tipo)}</span></td>
                     <td>${cliente.responsable_nombre || '<span class="tag tag-danger">Sin asignar</span>'}</td>
                     <td>${cliente.dia_atencion || '-'}</td>
                     <td>$${cliente.precio_por_visita?.toLocaleString() || '0'}</td>

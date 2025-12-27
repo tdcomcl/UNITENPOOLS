@@ -323,6 +323,11 @@ body {
     color: #155724;
 }
 
+.tag-info {
+    background: #e7f3ff;
+    color: #004085;
+}
+
 .tag-danger {
     background: #f8d7da;
     color: #721c24;
