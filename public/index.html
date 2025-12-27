@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Mantenimiento de Piscinas</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1>🏊 Sistema de Piscinas</h1>
+            <div class="nav-links">
+                <button class="nav-btn active" data-page="dashboard">Dashboard</button>
+                <button class="nav-btn" data-page="clientes">Clientes</button>
+                <button class="nav-btn" data-page="asignaciones">Asignaciones</button>
+                <button class="nav-btn" data-page="progreso" id="nav-progreso" style="display: none;">Progreso</button>
+                <button class="nav-btn" data-page="notas" id="nav-notas" style="display: none;">Notas</button>
+                <button class="nav-btn" data-page="responsables">Responsables</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        <!-- Dashboard -->
+        <div id="dashboard-page" class="page active">
+            <h2>Dashboard</h2>
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-card">
+                    <h3>Clientes Activos</h3>
+                    <p class="stat-number" id="stat-clientes">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Responsables</h3>
+                    <p class="stat-number" id="stat-responsables">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Asignaciones Esta Semana</h3>
+                    <p class="stat-number" id="stat-asignaciones">-</p>
+                </div>
+            </div>
+            <div class="section">
+                <h3>Acciones Rápidas</h3>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="asignarSemanaActual()">
+                        Asignar Clientes a Semana Actual
+                    </button>
+                    <button class="btn btn-secondary" onclick="app.showPage('clientes')">
+                        Ver Todos los Clientes
+                    </button>
+                    <button class="btn btn-secondary" onclick="app.showPage('asignaciones')">
+                        Ver Asignaciones
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Clientes -->
+        <div id="clientes-page" class="page">
+            <div class="page-header">
+                <h2 id="clientes-title">Clientes</h2>
+                <button class="btn btn-primary" id="btn-nuevo-cliente" onclick="app.showModal('cliente-modal')">
+                    + Nuevo Cliente
+                </button>
+            </div>
+            <div id="clientes-info-responsable" style="display: none;" class="section" style="background: #e7f3ff; border-left: 4px solid #0066cc; margin-bottom: 1.5rem; padding: 1rem;">
+                <p><strong>Vista limitada:</strong> Solo puedes ver nombre y dirección de tus clientes asignados.</p>
+            </div>
+            <div class="filters-panel">
+                <div class="filters">
+                    <input type="text" id="cliente-search" placeholder="Buscar cliente..." onkeyup="app.filtrarClientes()">
+                    <select id="responsable-filter" onchange="app.filtrarClientes()">
+                        <option value="">Todos los responsables</option>
+                    </select>
+                    <select id="comuna-filter" onchange="app.filtrarClientes()">
+                        <option value="">Todas las comunas</option>
+                    </select>
+                    <select id="dia-filter" onchange="app.filtrarClientes()">
+                        <option value="">Todos los días</option>
+                        <option value="Lunes">Lunes</option>
+                        <option value="Martes">Martes</option>
+                        <option value="Miércoles">Miércoles</option>
+                        <option value="Jueves">Jueves</option>
+                        <option value="Viernes">Viernes</option>
+                        <option value="Sábado">Sábado</option>
+                        <option value="Domingo">Domingo</option>
+                    </select>
+                    <select id="asignado-filter" onchange="app.filtrarClientes()">
+                        <option value="">Todos los clientes</option>
+                        <option value="asignado">✅ Con responsable</option>
+                        <option value="sin-asignar">❌ Sin asignar</option>
+                    </select>
+                </div>
+                <div class="bulk-actions" id="bulk-actions" style="display: none;">
+                    <span id="selected-count">0 seleccionados</span>
+                    <select id="bulk-responsable">
+                        <option value="">Seleccionar responsable...</option>
+                    </select>
+                    <button class="btn btn-primary btn-sm" onclick="app.asignarResponsableMasivo()">
+                        Asignar Responsable
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="app.deseleccionarTodos()">
+                        Deseleccionar
+                    </button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead id="clientes-table-header">
+                        <tr id="admin-header-row">
+                            <th style="width: 40px;">
+                                <input type="checkbox" id="select-all" onchange="app.toggleSelectAll(this.checked)">
+                            </th>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Comuna</th>
+                            <th>Responsable</th>
+                            <th>Día</th>
+                            <th id="precio-header">Precio</th>
+                            <th>Acciones</th>
+                        </tr>
+                        <tr id="responsable-header-row" style="display: none;">
+                            <th>Nombre</th>
+                            <th>Dirección</th>
+                            <th>Comuna</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clientes-table-body">
+                        <tr><td colspan="8" class="loading">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Asignaciones -->
+        <div id="asignaciones-page" class="page">
+            <div class="page-header">
+                <h2>Asignaciones Semanales</h2>
+                <div class="header-actions">
+                    <input type="date" id="semana-selector" onchange="app.cargarAsignaciones()">
+                    <button class="btn btn-primary" onclick="asignarSemanaActual()">
+                        Asignar Semana Actual
+                    </button>
+                </div>
+            </div>
+            <div id="asignaciones-container">
+                <div class="loading">Cargando asignaciones...</div>
+            </div>
+        </div>
+
+        <!-- Progreso (solo admin) -->
+        <div id="progreso-page" class="page">
+            <div class="page-header">
+                <h2>Progreso por Responsable</h2>
+                <div class="header-actions">
+                    <input type="date" id="progreso-semana-selector" onchange="app.cargarProgreso()">
+                    <button class="btn btn-secondary" onclick="app.actualizarProgreso()">
+                        🔄 Actualizar
+                    </button>
+                </div>
+            </div>
+            <div id="progreso-container">
+                <div class="loading">Cargando progreso...</div>
+            </div>
+        </div>
+
+        <!-- Notas (solo admin) -->
+        <div id="notas-page" class="page">
+            <div class="page-header">
+                <h2>Notas de Asignaciones</h2>
+                <div class="header-actions">
+                    <input type="date" id="notas-semana-selector" onchange="app.cargarNotas()">
+                    <button class="btn btn-secondary" onclick="app.cargarNotas()">
+                        🔄 Actualizar
+                    </button>
+                </div>
+            </div>
+            <div id="notas-container">
+                <div class="loading">Cargando notas...</div>
+            </div>
+        </div>
+
+        <!-- Responsables -->
+        <div id="responsables-page" class="page">
+            <div class="page-header">
+                <h2>Responsables</h2>
+                <button class="btn btn-primary" onclick="app.showModal('responsable-modal')">
+                    + Nuevo Responsable
+                </button>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="responsables-table-body">
+                        <tr><td colspan="3" class="loading">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Cliente -->
+    <div id="cliente-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="app.closeModal('cliente-modal')">&times;</span>
+            <h2 id="cliente-modal-title">Nuevo Cliente</h2>
+            <form id="cliente-form" onsubmit="app.guardarCliente(event)">
+                <input type="hidden" id="cliente-id">
+                <div class="form-group">
+                    <label>Nombre *</label>
+                    <input type="text" id="cliente-nombre" required>
+                </div>
+                <div class="form-group">
+                    <label>Dirección</label>
+                    <input type="text" id="cliente-direccion">
+                </div>
+                <div class="form-group">
+                    <label>Comuna</label>
+                    <input type="text" id="cliente-comuna">
+                </div>
+                <div class="form-group">
+                    <label>Celular</label>
+                    <input type="text" id="cliente-celular">
+                </div>
+                <div class="form-group">
+                    <label>Responsable</label>
+                    <select id="cliente-responsable">
+                        <option value="">Sin asignar</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Día de Atención</label>
+                    <select id="cliente-dia">
+                        <option value="">Sin asignar</option>
+                        <option value="Lunes">Lunes</option>
+                        <option value="Martes">Martes</option>
+                        <option value="Miércoles">Miércoles</option>
+                        <option value="Jueves">Jueves</option>
+                        <option value="Viernes">Viernes</option>
+                        <option value="Sábado">Sábado</option>
+                        <option value="Domingo">Domingo</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Precio por Visita</label>
+                    <input type="number" id="cliente-precio" min="0" step="0.01" value="0">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="app.closeModal('cliente-modal')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Responsable -->
+    <div id="responsable-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="app.closeModal('responsable-modal')">&times;</span>
+            <h2>Nuevo Responsable</h2>
+            <form id="responsable-form" onsubmit="app.guardarResponsable(event)">
+                <div class="form-group">
+                    <label>Nombre *</label>
+                    <input type="text" id="responsable-nombre" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="app.closeModal('responsable-modal')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Nota -->
+    <div id="nota-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="app.closeModal('nota-modal')">&times;</span>
+            <h2>Agregar/Editar Nota</h2>
+            <form id="nota-form" onsubmit="app.guardarNota(event)">
+                <input type="hidden" id="nota-asignacion-id">
+                <div class="form-group">
+                    <label>Nota</label>
+                    <textarea id="nota-texto" rows="4" placeholder="Escribe una nota sobre esta asignación..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="app.closeModal('nota-modal')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Visita -->
+    <div id="visita-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="app.closeModal('visita-modal')">&times;</span>
+            <h2>Registrar Visita</h2>
+            <form id="visita-form" onsubmit="app.registrarVisita(event)">
+                <input type="hidden" id="visita-cliente-id">
+                <div class="form-group">
+                    <label>Cliente</label>
+                    <input type="text" id="visita-cliente-nombre" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Fecha *</label>
+                    <input type="date" id="visita-fecha" required>
+                </div>
+                <div class="form-group">
+                    <label>Responsable</label>
+                    <select id="visita-responsable">
+                        <option value="">Sin asignar</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Precio</label>
+                    <input type="number" id="visita-precio" min="0" step="0.01">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="app.closeModal('visita-modal')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Registrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js?v=6.0"></script>
+</body>
+</html>
+
