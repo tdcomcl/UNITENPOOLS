@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "import": "node scripts/importar-excel.js",
     "crear-usuarios": "node scripts/crear-usuarios.js",
+    "inicializar": "node scripts/inicializar-todo.js",
     "verificar-usuarios": "node scripts/verificar-usuarios.js",
     "pm2:start": "pm2 start ecosystem.config.js",
     "pm2:stop": "pm2 stop piscinas-alagrando",
