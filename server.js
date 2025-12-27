@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const fs = require('fs');
 const path = require('path');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
@@ -19,10 +20,18 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Configurar sesiones con SQLite Store (mejor para producción)
+// Asegurar carpeta de sesiones (evita SQLITE_CANTOPEN)
+const sessionsDir = path.join(__dirname, 'sessions');
+try {
+  fs.mkdirSync(sessionsDir, { recursive: true });
+} catch (_) {
+  // no-op
+}
+
 app.use(session({
   store: new SQLiteStore({
     db: 'sessions.db',
-    dir: './sessions'
+    dir: sessionsDir
   }),
   secret: 'piscinas-secret-key-change-in-production',
   resave: false,
