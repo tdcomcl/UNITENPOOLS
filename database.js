@@ -51,6 +51,8 @@ class PiscinasDB {
         celular TEXT,
         email TEXT,
         documento_tipo TEXT DEFAULT 'invoice',
+        odoo_partner_id INTEGER,
+        odoo_last_sync TEXT,
         factura_razon_social TEXT,
         factura_rut TEXT,
         factura_giro TEXT,
@@ -78,6 +80,8 @@ class PiscinasDB {
     this.ensureColumn('clientes', 'rut', 'rut TEXT');
     this.ensureColumn('clientes', 'email', 'email TEXT');
     this.ensureColumn('clientes', 'documento_tipo', "documento_tipo TEXT DEFAULT 'invoice'");
+    this.ensureColumn('clientes', 'odoo_partner_id', 'odoo_partner_id INTEGER');
+    this.ensureColumn('clientes', 'odoo_last_sync', 'odoo_last_sync TEXT');
     this.ensureColumn('clientes', 'factura_razon_social', 'factura_razon_social TEXT');
     this.ensureColumn('clientes', 'factura_rut', 'factura_rut TEXT');
     this.ensureColumn('clientes', 'factura_giro', 'factura_giro TEXT');

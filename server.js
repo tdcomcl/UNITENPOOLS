@@ -5,6 +5,7 @@ const path = require('path');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const db = require('./database');
+const odoo = require('./odoo');
 
 const app = express();
 const PORT = process.env.PORT || 3011;
@@ -318,6 +319,42 @@ app.put('/api/clientes/:id', requireAuth, (req, res) => {
 
     db.actualizarCliente(req.params.id, updates);
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Odoo (solo admin) - test y sync cliente
+app.get('/api/odoo/test', requireAuth, async (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden usar Odoo' });
+    }
+    const result = await odoo.testConnection();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/odoo/clientes/:id/sync', requireAuth, async (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden sincronizar con Odoo' });
+    }
+
+    const cliente = db.obtenerClientePorId(req.params.id);
+    if (!cliente) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+
+    const { partnerId, action } = await odoo.upsertPartnerFromCliente(cliente);
+    db.actualizarCliente(req.params.id, {
+      odoo_partner_id: partnerId,
+      odoo_last_sync: new Date().toISOString()
+    });
+
+    res.json({ success: true, partnerId, action });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
