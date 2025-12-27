@@ -1,8 +1,10 @@
 const db = require('../database');
 
 // Script para inicializar responsables y usuarios desde cero
+// Solo crea lo que falta, NO sobrescribe datos existentes
 
-console.log('=== Inicializando base de datos ===\n');
+console.log('=== Verificando y creando responsables y usuarios ===\n');
+console.log('NOTA: Este script NO borra datos existentes, solo crea lo que falta.\n');
 
 // 1. Crear responsables
 console.log('1. Creando responsables...\n');
@@ -18,7 +20,7 @@ responsablesBase.forEach(resp => {
         const existe = responsables.find(r => r.nombre.toLowerCase() === resp.nombre.toLowerCase());
         
         if (!existe) {
-            const id = db.crearResponsable(resp.nombre);
+            const id = db.agregarResponsable(resp.nombre);
             console.log(`✓ Responsable creado: ${resp.nombre} (ID: ${id})`);
         } else {
             console.log(`⚠ Responsable ${resp.nombre} ya existe (ID: ${existe.id})`);
