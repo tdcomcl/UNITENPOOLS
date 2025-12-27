@@ -1026,24 +1026,7 @@ const app = {
         const direccion = document.getElementById('cliente-direccion')?.value?.trim() || '';
         const comuna = document.getElementById('cliente-comuna')?.value?.trim() || '';
 
-        // Validaciones base (para emitir documentos)
-        if (!direccion) {
-            alert('Falta Dirección (necesaria para emitir documentos)');
-            return;
-        }
-        if (!comuna) {
-            alert('Falta Comuna (necesaria para emitir documentos)');
-            return;
-        }
-        if (!email) {
-            alert('Falta Correo electrónico (necesario para emitir documentos)');
-            return;
-        }
-        // Invoice: usamos los datos base del cliente (rut opcional). Boleta/Factura: rut requerido.
-        if (documentoTipo !== 'invoice' && !rut) {
-            alert('Falta RUT (necesario para Boleta/Factura)');
-            return;
-        }
+        // Por ahora: SIN campos obligatorios (se podrá validar más adelante al momento de emitir documentos)
 
         // Validaciones Factura / Invoice
         const factura_razon_social = document.getElementById('factura-razon-social')?.value?.trim() || '';
@@ -1053,12 +1036,7 @@ const app = {
         const factura_comuna = document.getElementById('factura-comuna')?.value?.trim() || '';
         const factura_email = document.getElementById('factura-email')?.value?.trim() || '';
 
-        if (documentoTipo === 'factura') {
-            if (!factura_razon_social || !factura_rut || !factura_direccion || !factura_comuna || !factura_email) {
-                alert('Para Factura electrónica faltan datos (Razón social, RUT, Dirección, Comuna, Correo).');
-                return;
-            }
-        }
+        // Por ahora: SIN campos obligatorios también para Factura (se validará al emitir)
 
         const cliente = {
             nombre: document.getElementById('cliente-nombre').value,
