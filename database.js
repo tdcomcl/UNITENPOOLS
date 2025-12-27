@@ -50,7 +50,7 @@ class PiscinasDB {
         comuna TEXT,
         celular TEXT,
         email TEXT,
-        documento_tipo TEXT DEFAULT 'boleta',
+        documento_tipo TEXT DEFAULT 'invoice',
         factura_razon_social TEXT,
         factura_rut TEXT,
         factura_giro TEXT,
@@ -77,7 +77,7 @@ class PiscinasDB {
     // Migración segura: agregar columnas nuevas si la BD ya existía
     this.ensureColumn('clientes', 'rut', 'rut TEXT');
     this.ensureColumn('clientes', 'email', 'email TEXT');
-    this.ensureColumn('clientes', 'documento_tipo', "documento_tipo TEXT DEFAULT 'boleta'");
+    this.ensureColumn('clientes', 'documento_tipo', "documento_tipo TEXT DEFAULT 'invoice'");
     this.ensureColumn('clientes', 'factura_razon_social', 'factura_razon_social TEXT');
     this.ensureColumn('clientes', 'factura_rut', 'factura_rut TEXT');
     this.ensureColumn('clientes', 'factura_giro', 'factura_giro TEXT');
@@ -90,6 +90,17 @@ class PiscinasDB {
     this.ensureColumn('clientes', 'invoice_comuna', 'invoice_comuna TEXT');
     this.ensureColumn('clientes', 'invoice_email', 'invoice_email TEXT');
     this.ensureColumn('clientes', 'invoice_pais', 'invoice_pais TEXT');
+
+    // Default contable: si venía vacío o boleta, dejarlo en invoice (no pisa factura existente)
+    try {
+      this.db.prepare(`
+        UPDATE clientes
+        SET documento_tipo = 'invoice'
+        WHERE documento_tipo IS NULL OR documento_tipo = '' OR lower(documento_tipo) = 'boleta'
+      `).run();
+    } catch (_) {
+      // no-op
+    }
 
     // Tabla de visitas
     this.db.exec(`
@@ -194,7 +205,7 @@ class PiscinasDB {
 
   agregarCliente(nombre, direccion = null, comuna = null, celular = null, 
                  responsable_id = null, dia_atencion = null, precio_por_visita = 0,
-                 rut = null, email = null, documento_tipo = 'boleta',
+                 rut = null, email = null, documento_tipo = 'invoice',
                  factura_razon_social = null, factura_rut = null, factura_giro = null,
                  factura_direccion = null, factura_comuna = null, factura_email = null,
                  invoice_nombre = null, invoice_tax_id = null, invoice_direccion = null,
@@ -212,7 +223,7 @@ class PiscinasDB {
         c.precio_por_visita ?? 0,
         c.rut ?? null,
         c.email ?? null,
-        c.documento_tipo ?? 'boleta',
+        c.documento_tipo ?? 'invoice',
         c.factura_razon_social ?? null,
         c.factura_rut ?? null,
         c.factura_giro ?? null,

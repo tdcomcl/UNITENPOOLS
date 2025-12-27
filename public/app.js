@@ -316,7 +316,7 @@ const app = {
         if (isAdmin) {
             // Vista completa para admin
             const docLabel = (tipo) => {
-                const t = (tipo || 'boleta').toLowerCase();
+                const t = (tipo || 'invoice').toLowerCase();
                 if (t === 'factura') return 'Factura';
                 if (t === 'invoice') return 'Invoice';
                 return 'Boleta';
@@ -1018,7 +1018,7 @@ const app = {
     },
 
     actualizarCamposDocumento() {
-        const tipo = document.getElementById('cliente-documento-tipo')?.value || 'boleta';
+        const tipo = document.getElementById('cliente-documento-tipo')?.value || 'invoice';
         const facturaFields = document.getElementById('factura-fields');
 
         if (facturaFields) facturaFields.style.display = tipo === 'factura' ? 'block' : 'none';
@@ -1027,7 +1027,7 @@ const app = {
     async guardarCliente(e) {
         e.preventDefault();
 
-        const documentoTipo = document.getElementById('cliente-documento-tipo')?.value || 'boleta';
+        const documentoTipo = document.getElementById('cliente-documento-tipo')?.value || 'invoice';
         const rut = document.getElementById('cliente-rut')?.value?.trim() || '';
         const email = document.getElementById('cliente-email')?.value?.trim() || '';
         const direccion = document.getElementById('cliente-direccion')?.value?.trim() || '';
@@ -1109,7 +1109,7 @@ const app = {
         document.getElementById('cliente-celular').value = cliente.celular || '';
         if (document.getElementById('cliente-email')) document.getElementById('cliente-email').value = cliente.email || '';
         if (document.getElementById('cliente-documento-tipo')) {
-            document.getElementById('cliente-documento-tipo').value = cliente.documento_tipo || 'boleta';
+            document.getElementById('cliente-documento-tipo').value = cliente.documento_tipo || 'invoice';
         }
         // Factura
         if (document.getElementById('factura-razon-social')) document.getElementById('factura-razon-social').value = cliente.factura_razon_social || '';

@@ -231,7 +231,7 @@ app.post('/api/clientes', requireAuth, (req, res) => {
       comuna,
       celular,
       email: email || null,
-      documento_tipo: documento_tipo || 'boleta',
+      documento_tipo: documento_tipo || 'invoice',
       factura_razon_social: factura_razon_social || null,
       factura_rut: factura_rut || null,
       factura_giro: factura_giro || null,
