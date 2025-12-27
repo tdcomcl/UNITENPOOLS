@@ -167,7 +167,10 @@ app.post('/api/responsables', requireAuth, (req, res) => {
 // Clientes
 app.get('/api/clientes', requireAuth, (req, res) => {
   try {
-    const clientes = db.obtenerClientes(true, req.responsableId);
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden ver clientes' });
+    }
+    const clientes = db.obtenerClientes(true, null);
     res.json(clientes);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -176,13 +179,12 @@ app.get('/api/clientes', requireAuth, (req, res) => {
 
 app.get('/api/clientes/:id', requireAuth, (req, res) => {
   try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden ver clientes' });
+    }
     const cliente = db.obtenerClientePorId(req.params.id);
     if (!cliente) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
-    }
-    // Si es responsable, solo puede ver sus propios clientes
-    if (req.responsableId && cliente.responsable_id !== req.responsableId) {
-      return res.status(403).json({ error: 'No tienes permisos para ver este cliente' });
     }
     res.json(cliente);
   } catch (error) {
@@ -195,12 +197,58 @@ app.post('/api/clientes', requireAuth, (req, res) => {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden crear clientes' });
     }
-    const { nombre, direccion, comuna, celular, responsable_id, dia_atencion, precio_por_visita } = req.body;
+    const {
+      nombre,
+      rut,
+      direccion,
+      comuna,
+      celular,
+      email,
+      documento_tipo,
+      factura_razon_social,
+      factura_rut,
+      factura_giro,
+      factura_direccion,
+      factura_comuna,
+      factura_email,
+      invoice_nombre,
+      invoice_tax_id,
+      invoice_direccion,
+      invoice_comuna,
+      invoice_email,
+      invoice_pais,
+      responsable_id,
+      dia_atencion,
+      precio_por_visita
+    } = req.body;
     if (!nombre) {
       return res.status(400).json({ error: 'El nombre es obligatorio' });
     }
-    const id = db.agregarCliente(nombre, direccion, comuna, celular, responsable_id, dia_atencion, precio_por_visita || 0);
-    res.json({ id, nombre, direccion, comuna, celular, responsable_id, dia_atencion, precio_por_visita: precio_por_visita || 0 });
+    const id = db.agregarCliente({
+      nombre,
+      rut: rut || null,
+      direccion,
+      comuna,
+      celular,
+      email: email || null,
+      documento_tipo: documento_tipo || 'boleta',
+      factura_razon_social: factura_razon_social || null,
+      factura_rut: factura_rut || null,
+      factura_giro: factura_giro || null,
+      factura_direccion: factura_direccion || null,
+      factura_comuna: factura_comuna || null,
+      factura_email: factura_email || null,
+      invoice_nombre: invoice_nombre || null,
+      invoice_tax_id: invoice_tax_id || null,
+      invoice_direccion: invoice_direccion || null,
+      invoice_comuna: invoice_comuna || null,
+      invoice_email: invoice_email || null,
+      invoice_pais: invoice_pais || null,
+      responsable_id: responsable_id || null,
+      dia_atencion: dia_atencion || null,
+      precio_por_visita: precio_por_visita || 0
+    });
+    res.json({ id, success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -208,22 +256,66 @@ app.post('/api/clientes', requireAuth, (req, res) => {
 
 app.put('/api/clientes/:id', requireAuth, (req, res) => {
   try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden editar clientes' });
+    }
     const cliente = db.obtenerClientePorId(req.params.id);
     if (!cliente) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
-    // Responsables solo pueden editar sus propios clientes (y solo campos limitados)
-    if (req.responsableId && cliente.responsable_id !== req.responsableId) {
-      return res.status(403).json({ error: 'No tienes permisos para editar este cliente' });
-    }
-    
-    const { nombre, direccion, comuna, celular, responsable_id, dia_atencion, precio_por_visita, activo } = req.body;
-    
-    // Si es responsable, solo puede actualizar campos limitados
-    const updates = req.isAdmin 
-      ? { nombre, direccion, comuna, celular, responsable_id, dia_atencion, precio_por_visita, activo }
-      : { direccion, comuna, celular }; // Responsables solo pueden actualizar datos de contacto
-    
+
+    const {
+      nombre,
+      rut,
+      direccion,
+      comuna,
+      celular,
+      email,
+      documento_tipo,
+      factura_razon_social,
+      factura_rut,
+      factura_giro,
+      factura_direccion,
+      factura_comuna,
+      factura_email,
+      invoice_nombre,
+      invoice_tax_id,
+      invoice_direccion,
+      invoice_comuna,
+      invoice_email,
+      invoice_pais,
+      responsable_id,
+      dia_atencion,
+      precio_por_visita,
+      activo
+    } = req.body;
+
+    const updates = {
+      nombre,
+      rut,
+      direccion,
+      comuna,
+      celular,
+      email,
+      documento_tipo,
+      factura_razon_social,
+      factura_rut,
+      factura_giro,
+      factura_direccion,
+      factura_comuna,
+      factura_email,
+      invoice_nombre,
+      invoice_tax_id,
+      invoice_direccion,
+      invoice_comuna,
+      invoice_email,
+      invoice_pais,
+      responsable_id,
+      dia_atencion,
+      precio_por_visita,
+      activo
+    };
+
     db.actualizarCliente(req.params.id, updates);
     res.json({ success: true });
   } catch (error) {

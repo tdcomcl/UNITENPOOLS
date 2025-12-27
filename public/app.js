@@ -990,6 +990,9 @@ const app = {
 
     showModal(modalId) {
         document.getElementById(modalId).classList.add('active');
+        if (modalId === 'cliente-modal') {
+            this.actualizarCamposDocumento();
+        }
     },
 
     closeModal(modalId) {
@@ -998,20 +1001,102 @@ const app = {
             document.getElementById('cliente-form').reset();
             document.getElementById('cliente-id').value = '';
             document.getElementById('cliente-modal-title').textContent = 'Nuevo Cliente';
+            if (typeof this.actualizarCamposDocumento === 'function') {
+                this.actualizarCamposDocumento();
+            }
         } else if (modalId === 'nota-modal') {
             document.getElementById('nota-form').reset();
             document.getElementById('nota-asignacion-id').value = '';
         }
     },
 
+    actualizarCamposDocumento() {
+        const tipo = document.getElementById('cliente-documento-tipo')?.value || 'boleta';
+        const facturaFields = document.getElementById('factura-fields');
+        const invoiceFields = document.getElementById('invoice-fields');
+
+        if (facturaFields) facturaFields.style.display = tipo === 'factura' ? 'block' : 'none';
+        if (invoiceFields) invoiceFields.style.display = tipo === 'invoice' ? 'block' : 'none';
+    },
+
     async guardarCliente(e) {
         e.preventDefault();
-        
+
+        const documentoTipo = document.getElementById('cliente-documento-tipo')?.value || 'boleta';
+        const rut = document.getElementById('cliente-rut')?.value?.trim() || '';
+        const email = document.getElementById('cliente-email')?.value?.trim() || '';
+        const direccion = document.getElementById('cliente-direccion')?.value?.trim() || '';
+        const comuna = document.getElementById('cliente-comuna')?.value?.trim() || '';
+
+        // Validaciones base (para emitir documentos)
+        if (!direccion) {
+            alert('Falta Dirección (necesaria para emitir documentos)');
+            return;
+        }
+        if (!comuna) {
+            alert('Falta Comuna (necesaria para emitir documentos)');
+            return;
+        }
+        if (!email) {
+            alert('Falta Correo electrónico (necesario para emitir documentos)');
+            return;
+        }
+        if (documentoTipo !== 'invoice' && !rut) {
+            alert('Falta RUT (necesario para Boleta/Factura)');
+            return;
+        }
+
+        // Validaciones Factura / Invoice
+        const factura_razon_social = document.getElementById('factura-razon-social')?.value?.trim() || '';
+        const factura_rut = document.getElementById('factura-rut')?.value?.trim() || '';
+        const factura_giro = document.getElementById('factura-giro')?.value?.trim() || '';
+        const factura_direccion = document.getElementById('factura-direccion')?.value?.trim() || '';
+        const factura_comuna = document.getElementById('factura-comuna')?.value?.trim() || '';
+        const factura_email = document.getElementById('factura-email')?.value?.trim() || '';
+
+        const invoice_nombre = document.getElementById('invoice-nombre')?.value?.trim() || '';
+        const invoice_tax_id = document.getElementById('invoice-tax-id')?.value?.trim() || '';
+        const invoice_direccion = document.getElementById('invoice-direccion')?.value?.trim() || '';
+        const invoice_comuna = document.getElementById('invoice-comuna')?.value?.trim() || '';
+        const invoice_email = document.getElementById('invoice-email')?.value?.trim() || '';
+        const invoice_pais = document.getElementById('invoice-pais')?.value?.trim() || '';
+
+        if (documentoTipo === 'factura') {
+            if (!factura_razon_social || !factura_rut || !factura_direccion || !factura_comuna || !factura_email) {
+                alert('Para Factura electrónica faltan datos (Razón social, RUT, Dirección, Comuna, Correo).');
+                return;
+            }
+        }
+        if (documentoTipo === 'invoice') {
+            if (!invoice_nombre || !invoice_direccion || !invoice_email) {
+                alert('Para Invoice faltan datos (Nombre/Empresa, Dirección, Correo).');
+                return;
+            }
+        }
+
         const cliente = {
             nombre: document.getElementById('cliente-nombre').value,
-            direccion: document.getElementById('cliente-direccion').value,
-            comuna: document.getElementById('cliente-comuna').value,
+            rut: rut || null,
+            direccion,
+            comuna,
             celular: document.getElementById('cliente-celular').value,
+            email: email || null,
+            documento_tipo: documentoTipo,
+            // Factura
+            factura_razon_social: documentoTipo === 'factura' ? factura_razon_social : null,
+            factura_rut: documentoTipo === 'factura' ? factura_rut : null,
+            factura_giro: documentoTipo === 'factura' ? factura_giro : null,
+            factura_direccion: documentoTipo === 'factura' ? factura_direccion : null,
+            factura_comuna: documentoTipo === 'factura' ? factura_comuna : null,
+            factura_email: documentoTipo === 'factura' ? factura_email : null,
+            // Invoice
+            invoice_nombre: documentoTipo === 'invoice' ? invoice_nombre : null,
+            invoice_tax_id: documentoTipo === 'invoice' ? invoice_tax_id : null,
+            invoice_direccion: documentoTipo === 'invoice' ? invoice_direccion : null,
+            invoice_comuna: documentoTipo === 'invoice' ? invoice_comuna : null,
+            invoice_email: documentoTipo === 'invoice' ? invoice_email : null,
+            invoice_pais: documentoTipo === 'invoice' ? invoice_pais : null,
+            // Operación
             responsable_id: document.getElementById('cliente-responsable').value || null,
             dia_atencion: document.getElementById('cliente-dia').value || null,
             precio_por_visita: parseFloat(document.getElementById('cliente-precio').value) || 0
@@ -1054,14 +1139,35 @@ const app = {
 
         document.getElementById('cliente-id').value = cliente.id;
         document.getElementById('cliente-nombre').value = cliente.nombre;
+        if (document.getElementById('cliente-rut')) document.getElementById('cliente-rut').value = cliente.rut || '';
         document.getElementById('cliente-direccion').value = cliente.direccion || '';
         document.getElementById('cliente-comuna').value = cliente.comuna || '';
         document.getElementById('cliente-celular').value = cliente.celular || '';
+        if (document.getElementById('cliente-email')) document.getElementById('cliente-email').value = cliente.email || '';
+        if (document.getElementById('cliente-documento-tipo')) {
+            document.getElementById('cliente-documento-tipo').value = cliente.documento_tipo || 'boleta';
+        }
+        // Factura
+        if (document.getElementById('factura-razon-social')) document.getElementById('factura-razon-social').value = cliente.factura_razon_social || '';
+        if (document.getElementById('factura-rut')) document.getElementById('factura-rut').value = cliente.factura_rut || '';
+        if (document.getElementById('factura-giro')) document.getElementById('factura-giro').value = cliente.factura_giro || '';
+        if (document.getElementById('factura-direccion')) document.getElementById('factura-direccion').value = cliente.factura_direccion || '';
+        if (document.getElementById('factura-comuna')) document.getElementById('factura-comuna').value = cliente.factura_comuna || '';
+        if (document.getElementById('factura-email')) document.getElementById('factura-email').value = cliente.factura_email || '';
+        // Invoice
+        if (document.getElementById('invoice-nombre')) document.getElementById('invoice-nombre').value = cliente.invoice_nombre || '';
+        if (document.getElementById('invoice-tax-id')) document.getElementById('invoice-tax-id').value = cliente.invoice_tax_id || '';
+        if (document.getElementById('invoice-direccion')) document.getElementById('invoice-direccion').value = cliente.invoice_direccion || '';
+        if (document.getElementById('invoice-comuna')) document.getElementById('invoice-comuna').value = cliente.invoice_comuna || '';
+        if (document.getElementById('invoice-email')) document.getElementById('invoice-email').value = cliente.invoice_email || '';
+        if (document.getElementById('invoice-pais')) document.getElementById('invoice-pais').value = cliente.invoice_pais || '';
+
         document.getElementById('cliente-responsable').value = cliente.responsable_id || '';
         document.getElementById('cliente-dia').value = cliente.dia_atencion || '';
         document.getElementById('cliente-precio').value = cliente.precio_por_visita || 0;
         document.getElementById('cliente-modal-title').textContent = 'Editar Cliente';
 
+        this.actualizarCamposDocumento();
         this.showModal('cliente-modal');
     },
 

@@ -7,6 +7,14 @@ class PiscinasDB {
     this.initDatabase();
   }
 
+  ensureColumn(tableName, columnName, columnDefSql) {
+    const cols = this.db.prepare(`PRAGMA table_info(${tableName})`).all();
+    const exists = cols.some(c => c.name === columnName);
+    if (!exists) {
+      this.db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnDefSql}`);
+    }
+  }
+
   initDatabase() {
     // Tabla de responsables
     this.db.exec(`
@@ -37,9 +45,24 @@ class PiscinasDB {
       CREATE TABLE IF NOT EXISTS clientes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT NOT NULL,
+        rut TEXT,
         direccion TEXT,
         comuna TEXT,
         celular TEXT,
+        email TEXT,
+        documento_tipo TEXT DEFAULT 'boleta',
+        factura_razon_social TEXT,
+        factura_rut TEXT,
+        factura_giro TEXT,
+        factura_direccion TEXT,
+        factura_comuna TEXT,
+        factura_email TEXT,
+        invoice_nombre TEXT,
+        invoice_tax_id TEXT,
+        invoice_direccion TEXT,
+        invoice_comuna TEXT,
+        invoice_email TEXT,
+        invoice_pais TEXT,
         responsable_id INTEGER,
         dia_atencion TEXT,
         precio_por_visita REAL DEFAULT 0,
@@ -50,6 +73,23 @@ class PiscinasDB {
         FOREIGN KEY (responsable_id) REFERENCES responsables(id)
       )
     `);
+
+    // Migración segura: agregar columnas nuevas si la BD ya existía
+    this.ensureColumn('clientes', 'rut', 'rut TEXT');
+    this.ensureColumn('clientes', 'email', 'email TEXT');
+    this.ensureColumn('clientes', 'documento_tipo', "documento_tipo TEXT DEFAULT 'boleta'");
+    this.ensureColumn('clientes', 'factura_razon_social', 'factura_razon_social TEXT');
+    this.ensureColumn('clientes', 'factura_rut', 'factura_rut TEXT');
+    this.ensureColumn('clientes', 'factura_giro', 'factura_giro TEXT');
+    this.ensureColumn('clientes', 'factura_direccion', 'factura_direccion TEXT');
+    this.ensureColumn('clientes', 'factura_comuna', 'factura_comuna TEXT');
+    this.ensureColumn('clientes', 'factura_email', 'factura_email TEXT');
+    this.ensureColumn('clientes', 'invoice_nombre', 'invoice_nombre TEXT');
+    this.ensureColumn('clientes', 'invoice_tax_id', 'invoice_tax_id TEXT');
+    this.ensureColumn('clientes', 'invoice_direccion', 'invoice_direccion TEXT');
+    this.ensureColumn('clientes', 'invoice_comuna', 'invoice_comuna TEXT');
+    this.ensureColumn('clientes', 'invoice_email', 'invoice_email TEXT');
+    this.ensureColumn('clientes', 'invoice_pais', 'invoice_pais TEXT');
 
     // Tabla de visitas
     this.db.exec(`
@@ -153,13 +193,76 @@ class PiscinasDB {
   }
 
   agregarCliente(nombre, direccion = null, comuna = null, celular = null, 
-                 responsable_id = null, dia_atencion = null, precio_por_visita = 0) {
+                 responsable_id = null, dia_atencion = null, precio_por_visita = 0,
+                 rut = null, email = null, documento_tipo = 'boleta',
+                 factura_razon_social = null, factura_rut = null, factura_giro = null,
+                 factura_direccion = null, factura_comuna = null, factura_email = null,
+                 invoice_nombre = null, invoice_tax_id = null, invoice_direccion = null,
+                 invoice_comuna = null, invoice_email = null, invoice_pais = null) {
+    // Backward compatible: permitir pasar un objeto
+    if (typeof nombre === 'object' && nombre !== null) {
+      const c = nombre;
+      return this.agregarCliente(
+        c.nombre,
+        c.direccion ?? null,
+        c.comuna ?? null,
+        c.celular ?? null,
+        c.responsable_id ?? null,
+        c.dia_atencion ?? null,
+        c.precio_por_visita ?? 0,
+        c.rut ?? null,
+        c.email ?? null,
+        c.documento_tipo ?? 'boleta',
+        c.factura_razon_social ?? null,
+        c.factura_rut ?? null,
+        c.factura_giro ?? null,
+        c.factura_direccion ?? null,
+        c.factura_comuna ?? null,
+        c.factura_email ?? null,
+        c.invoice_nombre ?? null,
+        c.invoice_tax_id ?? null,
+        c.invoice_direccion ?? null,
+        c.invoice_comuna ?? null,
+        c.invoice_email ?? null,
+        c.invoice_pais ?? null
+      );
+    }
+
     const stmt = this.db.prepare(`
       INSERT INTO clientes 
-      (nombre, direccion, comuna, celular, responsable_id, dia_atencion, precio_por_visita)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      (nombre, rut, direccion, comuna, celular, email, documento_tipo,
+       factura_razon_social, factura_rut, factura_giro, factura_direccion, factura_comuna, factura_email,
+       invoice_nombre, invoice_tax_id, invoice_direccion, invoice_comuna, invoice_email, invoice_pais,
+       responsable_id, dia_atencion, precio_por_visita)
+      VALUES (?, ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?,
+              ?, ?, ?)
     `);
-    const info = stmt.run(nombre, direccion, comuna, celular, responsable_id, dia_atencion, precio_por_visita);
+    const info = stmt.run(
+      nombre,
+      rut,
+      direccion,
+      comuna,
+      celular,
+      email,
+      documento_tipo,
+      factura_razon_social,
+      factura_rut,
+      factura_giro,
+      factura_direccion,
+      factura_comuna,
+      factura_email,
+      invoice_nombre,
+      invoice_tax_id,
+      invoice_direccion,
+      invoice_comuna,
+      invoice_email,
+      invoice_pais,
+      responsable_id,
+      dia_atencion,
+      precio_por_visita
+    );
     return info.lastInsertRowid;
   }
 
