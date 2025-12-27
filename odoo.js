@@ -85,6 +85,49 @@ async function upsertPartnerFromCliente(cliente) {
   return { partnerId, action: 'created' };
 }
 
+async function getProductIdForService() {
+  const envId = process.env.ODOO_PRODUCT_ID;
+  if (envId) return parseInt(envId, 10);
+
+  const productName = process.env.ODOO_PRODUCT_NAME || 'Servicio semanal de mantención de piscina';
+
+  // 1) Buscar en product.product
+  let ids = await executeKw({
+    model: 'product.product',
+    method: 'search',
+    args: [[['name', '=', productName]]],
+    kwargs: { limit: 1 }
+  });
+  if (Array.isArray(ids) && ids.length > 0) return ids[0];
+
+  // 2) Buscar en product.template y tomar variante
+  ids = await executeKw({
+    model: 'product.template',
+    method: 'search',
+    args: [[['name', '=', productName]]],
+    kwargs: { limit: 1 }
+  });
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new Error(
+      `No se encontró el producto '${productName}' en Odoo. ` +
+      `Configura ODOO_PRODUCT_ID o crea el producto con ese nombre.`
+    );
+  }
+  const [tmpl] = await executeKw({
+    model: 'product.template',
+    method: 'read',
+    args: [[ids[0]], ['product_variant_id', 'product_variant_ids']]
+  });
+  const variantId =
+    (tmpl?.product_variant_id && Array.isArray(tmpl.product_variant_id) ? tmpl.product_variant_id[0] : null) ||
+    (Array.isArray(tmpl?.product_variant_ids) && tmpl.product_variant_ids.length > 0 ? tmpl.product_variant_ids[0] : null);
+
+  if (!variantId) {
+    throw new Error(`Producto template encontrado pero sin variante usable: '${productName}'`);
+  }
+  return variantId;
+}
+
 async function getSaleJournalId() {
   const envId = process.env.ODOO_SALES_JOURNAL_ID;
   if (envId) return parseInt(envId, 10);
@@ -124,13 +167,14 @@ function mapDocumentoTipo(clienteDocumentoTipo) {
 
 async function createInvoiceForVisit({ cliente, visita, partnerId }) {
   const journalId = await getSaleJournalId();
-  const incomeAccountId = await getIncomeAccountId();
+  const productId = await getProductIdForService();
 
   const tipo = mapDocumentoTipo(cliente.documento_tipo);
   const moveType = 'out_invoice';
 
-  const lineName = (process.env.ODOO_SERVICE_NAME || 'Mantención piscina');
-  const priceUnit = Number(visita.precio ?? cliente.precio_por_visita ?? 0) || 0;
+  const lineName = (process.env.ODOO_SERVICE_NAME || 'Servicio semanal de mantención de piscina');
+  // El valor de la visita viene del cliente (precio_por_visita). Si viene precio en la visita, se usa como fallback.
+  const priceUnit = Number(cliente.precio_por_visita ?? visita.precio ?? 0) || 0;
 
   const moveVals = {
     move_type: moveType,
@@ -140,9 +184,9 @@ async function createInvoiceForVisit({ cliente, visita, partnerId }) {
     ref: `Visita ${visita.id} - Cliente ${cliente.id}`,
     invoice_line_ids: [[0, 0, {
       name: lineName,
+      product_id: productId,
       quantity: 1,
-      price_unit: priceUnit,
-      account_id: incomeAccountId
+      price_unit: priceUnit
     }]]
   };
 
