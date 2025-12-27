@@ -1,9 +1,20 @@
 const db = require('../database');
+const fs = require('fs');
+const path = require('path');
 
 // Script para inicializar responsables y usuarios desde cero
 // Solo crea lo que falta, NO sobrescribe datos existentes
 
 console.log('=== Verificando y creando responsables y usuarios ===\n');
+
+// Verificar que existe la base de datos
+const dbPath = path.join(__dirname, '..', 'piscinas.db');
+if (fs.existsSync(dbPath)) {
+    const stats = fs.statSync(dbPath);
+    console.log(`✓ Usando base de datos existente: piscinas.db (${(stats.size / 1024).toFixed(2)} KB)`);
+} else {
+    console.log('⚠ Base de datos no encontrada. Se creará una nueva.');
+}
 console.log('NOTA: Este script NO borra datos existentes, solo crea lo que falta.\n');
 
 // 1. Crear responsables
