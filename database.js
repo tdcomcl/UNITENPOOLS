@@ -146,12 +146,16 @@ class PiscinasDB {
         asignada INTEGER DEFAULT 1,
         realizada INTEGER DEFAULT 0,
         notas TEXT,
+        visita_id INTEGER,
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (cliente_id) REFERENCES clientes(id),
         FOREIGN KEY (responsable_id) REFERENCES responsables(id),
         UNIQUE(semana_inicio, cliente_id)
       )
     `);
+
+    // Migración segura para asignaciones
+    this.ensureColumn('asignaciones_semanales', 'visita_id', 'visita_id INTEGER');
 
     // Índices
     this.db.exec(`

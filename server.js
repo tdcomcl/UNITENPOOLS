@@ -417,7 +417,7 @@ app.post('/api/asignaciones/asignar-semana-actual', requireAuth, (req, res) => {
   }
 });
 
-app.put('/api/asignaciones/:id', requireAuth, (req, res) => {
+app.put('/api/asignaciones/:id', requireAuth, async (req, res) => {
   try {
     // Si es responsable, solo puede marcar como realizada sus propias asignaciones
     const asignacion = db.db.prepare('SELECT * FROM asignaciones_semanales WHERE id = ?').get(req.params.id);
@@ -447,11 +447,62 @@ app.put('/api/asignaciones/:id', requireAuth, (req, res) => {
     
     db.actualizarAsignacion(req.params.id, updates);
     
-    // Verificar que se guardó correctamente
+    // Si se marcó como realizada, crear 1 visita por asignación (si no existe) y emitir documento en Odoo.
+    let odooResult = null;
+    let odooError = null;
+    let visitaId = asignacion.visita_id || null;
+    if (realizada !== undefined && Number(realizada) === 1) {
+      try {
+        const hoy = new Date().toISOString().split('T')[0];
+
+        // 1) Asegurar 1 visita por asignación
+        if (!visitaId) {
+          // Registrar visita (precio NULL => usa precio_por_visita del cliente)
+          visitaId = db.registrarVisita(asignacion.cliente_id, hoy, asignacion.responsable_id || null, null, true);
+          db.actualizarAsignacion(req.params.id, { visita_id: visitaId });
+        }
+
+        // 2) Emitir documento SI no existe aún para esa visita (idempotente)
+        const visitaRow = visitaId
+          ? db.db.prepare('SELECT * FROM visitas WHERE id = ?').get(visitaId)
+          : null;
+
+        if (visitaRow && !visitaRow.odoo_move_id) {
+          const cliente = db.obtenerClientePorId(asignacion.cliente_id);
+          if (cliente) {
+            const { partnerId } = await odoo.upsertPartnerFromCliente(cliente);
+            db.actualizarCliente(asignacion.cliente_id, {
+              odoo_partner_id: partnerId,
+              odoo_last_sync: new Date().toISOString()
+            });
+            odooResult = await odoo.createInvoiceForVisit({
+              cliente,
+              visita: { id: visitaId, fecha_visita: hoy, precio: null },
+              partnerId
+            });
+            db.actualizarVisita(visitaId, {
+              odoo_move_id: odooResult.moveId,
+              odoo_move_name: odooResult.name,
+              odoo_payment_state: odooResult.payment_state,
+              odoo_last_sync: new Date().toISOString(),
+              odoo_error: null
+            });
+          }
+        }
+      } catch (e) {
+        odooError = e?.message || String(e);
+        console.error('[Odoo] Error emitiendo documento desde asignación', req.params.id, odooError);
+        if (visitaId) {
+          db.actualizarVisita(visitaId, {
+            odoo_last_sync: new Date().toISOString(),
+            odoo_error: odooError
+          });
+        }
+      }
+    }
+
     const actualizada = db.db.prepare('SELECT * FROM asignaciones_semanales WHERE id = ?').get(req.params.id);
-    console.log(`[API] Asignación después de actualizar - Notas:`, actualizada?.notas || '(null)');
-    
-    res.json({ success: true, notas: actualizada?.notas });
+    res.json({ success: true, notas: actualizada?.notas, visita_id: visitaId, odoo: odooResult, odoo_error: odooError });
   } catch (error) {
     console.error('[API] Error actualizando asignación:', error);
     res.status(500).json({ error: error.message });

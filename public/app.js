@@ -702,6 +702,21 @@ const app = {
                 window.location.href = '/login.html';
                 return;
             }
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                const msg = data?.error || `HTTP ${res.status}`;
+                alert(`Error al actualizar la asignación: ${msg}`);
+                return;
+            }
+
+            // Mostrar resultado de emisión Odoo si aplica
+            if (realizada) {
+                if (data?.odoo?.name) {
+                    alert(`✅ Asignación marcada realizada\nDocumento Odoo: ${data.odoo.name}\nEstado pago: ${data.odoo.payment_state || 'pendiente'}`);
+                } else if (data?.odoo_error) {
+                    alert(`✅ Asignación marcada realizada\nPero Odoo falló al emitir:\n${data.odoo_error}\n\n(Quedó pendiente de emisión)`);
+                }
+            }
             
             // Actualizar asignaciones
             await this.cargarAsignaciones();
