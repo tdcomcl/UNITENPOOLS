@@ -8,6 +8,8 @@ const path = require('path');
 const { execSync } = require('child_process');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
+const multer = require('multer');
+const XLSX = require('xlsx');
 const db = require('./database');
 const odoo = require('./odoo');
 const mailer = require('./mailer');
@@ -57,6 +59,10 @@ async function notifyOdooError({ where, odooError, cliente, visitaId, asignacion
 
 const app = express();
 const PORT = process.env.PORT || 3011;
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 } // 15MB
+});
 
 // Middleware
 app.use(cors({
@@ -243,6 +249,211 @@ app.get('/api/clientes', requireAuth, (req, res) => {
     }
     const clientes = db.obtenerClientes(true, null);
     res.json(clientes);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/clientes/export', requireAuth, (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden exportar clientes' });
+    }
+
+    const clientes = db.obtenerClientes(false, null); // incluir activos e inactivos
+    const rows = clientes.map(c => ({
+      id: c.id,
+      nombre: c.nombre || '',
+      rut: c.rut || '',
+      direccion: c.direccion || '',
+      comuna: c.comuna || '',
+      celular: c.celular || '',
+      email: c.email || '',
+      documento_tipo: c.documento_tipo || 'invoice',
+      responsable_id: c.responsable_id || '',
+      responsable: c.responsable_nombre || '',
+      dia_atencion: c.dia_atencion || '',
+      precio_por_visita: c.precio_por_visita ?? 0,
+      activo: c.activo ?? 1,
+      notas: c.notas || '',
+      factura_razon_social: c.factura_razon_social || '',
+      factura_rut: c.factura_rut || '',
+      factura_giro: c.factura_giro || '',
+      factura_direccion: c.factura_direccion || '',
+      factura_comuna: c.factura_comuna || '',
+      factura_email: c.factura_email || '',
+      odoo_partner_id: c.odoo_partner_id || '',
+      odoo_last_sync: c.odoo_last_sync || ''
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Clientes');
+
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const today = new Date().toISOString().slice(0, 10);
+    const filename = `clientes-${today}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buf);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/clientes/import', requireAuth, upload.single('file'), (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden importar clientes' });
+    }
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ error: 'Archivo Excel no recibido (campo: file)' });
+    }
+
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = wb.SheetNames?.[0];
+    if (!sheetName) {
+      return res.status(400).json({ error: 'El Excel no tiene hojas' });
+    }
+    const ws = wb.Sheets[sheetName];
+    const rawRows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+    const normKey = (k) => String(k || '').trim().toLowerCase();
+    const pick = (obj, keys) => {
+      for (const k of keys) {
+        const found = Object.keys(obj).find(ok => normKey(ok) === normKey(k));
+        if (found !== undefined) return obj[found];
+      }
+      return undefined;
+    };
+    const toStr = (v) => {
+      if (v === undefined || v === null) return null;
+      const s = String(v).trim();
+      return s === '' ? null : s;
+    };
+    const toNum = (v) => {
+      if (v === undefined || v === null) return null;
+      if (typeof v === 'number') return v;
+      const s = String(v).replace(',', '.').trim();
+      if (!s) return null;
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    };
+    const toInt = (v) => {
+      const n = toNum(v);
+      if (n === null) return null;
+      return parseInt(String(n), 10);
+    };
+    const normalizeDocTipo = (v) => {
+      const s = String(v || '').trim().toLowerCase();
+      if (!s) return 'invoice';
+      if (s.includes('boleta')) return 'boleta';
+      if (s.includes('factura')) return 'factura';
+      if (s === 'invoice') return 'invoice';
+      return s; // fallback (por si usan valores internos)
+    };
+
+    const run = db.db.transaction((rows) => {
+      const result = { created: 0, updated: 0, skipped: 0, errors: [] };
+
+      rows.forEach((r, idx) => {
+        try {
+          const id = toInt(pick(r, ['id', 'ID', 'Id']));
+          const nombre = toStr(pick(r, ['nombre', 'Nombre'])) || '';
+          if (!nombre.trim()) {
+            result.skipped++;
+            result.errors.push({ row: idx + 2, error: 'Falta nombre' });
+            return;
+          }
+
+          const responsableId = toInt(pick(r, ['responsable_id', 'responsable id', 'id_responsable']));
+          const responsableNombre = toStr(pick(r, ['responsable', 'Responsable']));
+          let resolvedResponsableId = responsableId;
+          if (!resolvedResponsableId && responsableNombre) {
+            resolvedResponsableId = db.agregarResponsable(responsableNombre);
+          }
+
+          const payload = {
+            nombre: nombre,
+            rut: toStr(pick(r, ['rut', 'RUT'])),
+            direccion: toStr(pick(r, ['direccion', 'dirección'])),
+            comuna: toStr(pick(r, ['comuna'])),
+            celular: toStr(pick(r, ['celular', 'telefono', 'teléfono'])),
+            email: toStr(pick(r, ['email', 'correo', 'correo electrónico', 'correo electronico'])),
+            documento_tipo: normalizeDocTipo(pick(r, ['documento_tipo', 'documento', 'tipo_documento', 'tipo documento'])),
+            responsable_id: resolvedResponsableId,
+            dia_atencion: toStr(pick(r, ['dia_atencion', 'día', 'dia', 'día_atencion'])),
+            precio_por_visita: toNum(pick(r, ['precio_por_visita', 'precio', 'valor'])),
+            activo: (() => {
+              const v = pick(r, ['activo', 'Activo']);
+              if (v === '' || v === null || v === undefined) return undefined;
+              const s = String(v).trim().toLowerCase();
+              if (s === '1' || s === 'si' || s === 'sí' || s === 'true') return 1;
+              if (s === '0' || s === 'no' || s === 'false') return 0;
+              const n = toInt(v);
+              return n === null ? undefined : (n ? 1 : 0);
+            })(),
+            notas: toStr(pick(r, ['notas', 'Notas'])),
+            factura_razon_social: toStr(pick(r, ['factura_razon_social', 'razon social', 'razón social'])),
+            factura_rut: toStr(pick(r, ['factura_rut', 'rut factura'])),
+            factura_giro: toStr(pick(r, ['factura_giro', 'giro'])),
+            factura_direccion: toStr(pick(r, ['factura_direccion', 'direccion factura', 'dirección factura'])),
+            factura_comuna: toStr(pick(r, ['factura_comuna', 'comuna factura'])),
+            factura_email: toStr(pick(r, ['factura_email', 'correo factura', 'email factura']))
+          };
+
+          // Normalizar nulls / defaults
+          if (payload.precio_por_visita === null) payload.precio_por_visita = 0;
+          if (!payload.documento_tipo) payload.documento_tipo = 'invoice';
+
+          if (id) {
+            const exists = db.obtenerClientePorId(id);
+            if (exists) {
+              db.actualizarCliente(id, payload);
+              result.updated++;
+              return;
+            }
+          }
+
+          const newId = db.agregarCliente({
+            nombre: payload.nombre,
+            rut: payload.rut,
+            direccion: payload.direccion,
+            comuna: payload.comuna,
+            celular: payload.celular,
+            email: payload.email,
+            documento_tipo: payload.documento_tipo || 'invoice',
+            factura_razon_social: payload.factura_razon_social,
+            factura_rut: payload.factura_rut,
+            factura_giro: payload.factura_giro,
+            factura_direccion: payload.factura_direccion,
+            factura_comuna: payload.factura_comuna,
+            factura_email: payload.factura_email,
+            responsable_id: payload.responsable_id,
+            dia_atencion: payload.dia_atencion,
+            precio_por_visita: payload.precio_por_visita
+          });
+
+          // Setear campos que no están en agregarCliente (activo/notas)
+          const post = {};
+          if (payload.activo !== undefined) post.activo = payload.activo;
+          if (payload.notas !== undefined) post.notas = payload.notas;
+          if (Object.keys(post).length > 0) {
+            db.actualizarCliente(newId, post);
+          }
+
+          result.created++;
+        } catch (e) {
+          result.errors.push({ row: idx + 2, error: e?.message || String(e) });
+        }
+      });
+
+      return result;
+    });
+
+    const summary = run(rawRows);
+    res.json({ success: true, ...summary });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

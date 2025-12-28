@@ -175,6 +175,18 @@ const app = {
             });
         });
 
+        // Import Excel Clientes (admin)
+        const fileInput = document.getElementById('clientes-import-file');
+        if (fileInput) {
+            fileInput.addEventListener('change', async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                await this.importarClientesExcel(f);
+                // reset para permitir re-subir el mismo archivo
+                e.target.value = '';
+            });
+        }
+
         // Cerrar modales al hacer clic fuera
         document.querySelectorAll('.modal').forEach(modal => {
             modal.addEventListener('click', (e) => {
@@ -220,6 +232,92 @@ const app = {
             this.cargarNotas();
         } else if (page === 'responsables') {
             this.cargarResponsables();
+        }
+    },
+
+    seleccionarImportExcelClientes() {
+        const input = document.getElementById('clientes-import-file');
+        if (!input) return;
+        input.click();
+    },
+
+    async descargarClientesExcel() {
+        try {
+            this.showToast('Preparando Excel de clientes…', 'info', 2000);
+            const res = await fetch(`${API_URL}/api/clientes/export`, {
+                credentials: 'include'
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || `Error HTTP ${res.status}`);
+            }
+            const blob = await res.blob();
+            const cd = res.headers.get('content-disposition') || '';
+            const m = /filename="([^"]+)"/i.exec(cd);
+            const filename = m?.[1] || 'clientes.xlsx';
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+            this.showToast(`Error al descargar Excel: ${e?.message || e}`, 'error', 4500);
+        }
+    },
+
+    mostrarResultadoImportClientes({ created, updated, skipped, errors }) {
+        const box = document.getElementById('clientes-import-result');
+        const text = document.getElementById('clientes-import-result-text');
+        if (!box || !text) return;
+
+        const lines = [
+            `Creados: ${created || 0}`,
+            `Actualizados: ${updated || 0}`,
+            `Saltados: ${skipped || 0}`,
+            `Errores: ${(errors || []).length}`
+        ];
+
+        if (errors && errors.length) {
+            lines.push('');
+            lines.push('Detalle (primeros 20):');
+            errors.slice(0, 20).forEach(er => {
+                lines.push(`- Fila ${er.row}: ${er.error}`);
+            });
+        }
+
+        text.textContent = lines.join('\n');
+        box.style.display = 'block';
+    },
+
+    async importarClientesExcel(file) {
+        try {
+            this.showToast('Por favor espere… importando Excel de clientes', 'info', 2500);
+            const fd = new FormData();
+            fd.append('file', file);
+
+            const res = await fetch(`${API_URL}/api/clientes/import`, {
+                method: 'POST',
+                body: fd,
+                credentials: 'include'
+            });
+
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.error || `Error HTTP ${res.status}`);
+            }
+
+            this.mostrarResultadoImportClientes(data);
+            const msg = `✅ Importación OK. Creados: ${data.created || 0}, Actualizados: ${data.updated || 0}, Errores: ${(data.errors || []).length}`;
+            this.showToast(msg, (data.errors || []).length ? 'warning' : 'success', 6000);
+            await this.cargarClientes();
+        } catch (e) {
+            console.error(e);
+            this.showToast(`Error importando Excel: ${e?.message || e}`, 'error', 5000);
         }
     },
 

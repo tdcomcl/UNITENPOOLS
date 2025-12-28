@@ -59,9 +59,22 @@
         <div id="clientes-page" class="page">
             <div class="page-header">
                 <h2 id="clientes-title">Clientes</h2>
-                <button class="btn btn-primary" id="btn-nuevo-cliente" onclick="app.showModal('cliente-modal')">
-                    + Nuevo Cliente
-                </button>
+                <div class="header-actions" style="display: flex; gap: 0.5rem; align-items: center;">
+                    <button class="btn btn-secondary" id="btn-exportar-clientes" onclick="app.descargarClientesExcel()">
+                        ⬇️ Descargar Excel
+                    </button>
+                    <button class="btn btn-secondary" id="btn-importar-clientes" onclick="app.seleccionarImportExcelClientes()">
+                        ⬆️ Importar Excel
+                    </button>
+                    <input type="file" id="clientes-import-file" accept=".xlsx,.xls" style="display:none">
+                    <button class="btn btn-primary" id="btn-nuevo-cliente" onclick="app.showModal('cliente-modal')">
+                        + Nuevo Cliente
+                    </button>
+                </div>
+            </div>
+            <div id="clientes-import-result" class="section" style="display:none; background:#fff7e6; border-left:4px solid #f59e0b; padding:0.75rem; margin-bottom:1rem;">
+                <div style="font-weight:600; margin-bottom:0.25rem;">Importación Excel</div>
+                <div id="clientes-import-result-text" style="white-space:pre-wrap;"></div>
             </div>
             <div id="clientes-info-responsable" style="display: none;" class="section" style="background: #e7f3ff; border-left: 4px solid #0066cc; margin-bottom: 1.5rem; padding: 1rem;">
                 <p><strong>Vista limitada:</strong> Solo puedes ver nombre y dirección de tus clientes asignados.</p>
