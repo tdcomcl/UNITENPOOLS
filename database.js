@@ -121,6 +121,8 @@ class PiscinasDB {
         odoo_payment_state TEXT,
         odoo_last_sync TEXT,
         odoo_error TEXT,
+        odoo_notified_at TEXT,
+        odoo_notify_count INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (cliente_id) REFERENCES clientes(id),
         FOREIGN KEY (responsable_id) REFERENCES responsables(id)
@@ -133,6 +135,8 @@ class PiscinasDB {
     this.ensureColumn('visitas', 'odoo_payment_state', 'odoo_payment_state TEXT');
     this.ensureColumn('visitas', 'odoo_last_sync', 'odoo_last_sync TEXT');
     this.ensureColumn('visitas', 'odoo_error', 'odoo_error TEXT');
+    this.ensureColumn('visitas', 'odoo_notified_at', 'odoo_notified_at TEXT');
+    this.ensureColumn('visitas', 'odoo_notify_count', 'odoo_notify_count INTEGER DEFAULT 0');
 
     // Tabla de asignaciones semanales
     this.db.exec(`

@@ -8,6 +8,50 @@ const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const db = require('./database');
 const odoo = require('./odoo');
+const mailer = require('./mailer');
+
+function shouldNotifyOdooError(visitaRow) {
+  // Anti-spam: máximo 1 mail cada 10 minutos por visita
+  if (!visitaRow) return true;
+  if (!visitaRow.odoo_notified_at) return true;
+  const last = Date.parse(visitaRow.odoo_notified_at);
+  if (Number.isNaN(last)) return true;
+  return Date.now() - last > 10 * 60 * 1000;
+}
+
+async function notifyOdooError({ where, odooError, cliente, visitaId, asignacionId }) {
+  try {
+    const subject = `[UNITENPOOLS] Error Odoo al emitir (${where}) - Cliente ${cliente?.id || '?'} - Visita ${visitaId || '?'}`;
+    const text = [
+      `Fecha: ${new Date().toISOString()}`,
+      `Lugar: ${where}`,
+      `Cliente: ${cliente?.id || ''} - ${cliente?.nombre || ''}`,
+      `Documento tipo: ${cliente?.documento_tipo || ''}`,
+      `Asignación: ${asignacionId || ''}`,
+      `Visita: ${visitaId || ''}`,
+      '',
+      'Error:',
+      String(odooError || ''),
+      '',
+      'Server:',
+      `PORT=${process.env.PORT || ''}`,
+      `NODE_ENV=${process.env.NODE_ENV || ''}`
+    ].join('\n');
+
+    await mailer.sendOdooErrorEmail({ subject, text });
+
+    if (visitaId) {
+      const row = db.db.prepare('SELECT odoo_notify_count FROM visitas WHERE id = ?').get(visitaId);
+      const next = (row?.odoo_notify_count || 0) + 1;
+      db.actualizarVisita(visitaId, {
+        odoo_notified_at: new Date().toISOString(),
+        odoo_notify_count: next
+      });
+    }
+  } catch (e) {
+    console.error('[MAIL] Error enviando correo de alerta:', e?.message || e);
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3011;
@@ -498,6 +542,15 @@ app.put('/api/asignaciones/:id', requireAuth, async (req, res) => {
             odoo_error: odooError
           });
         }
+
+        // Notificar por correo
+        if (visitaId) {
+          const visitaRow = db.db.prepare('SELECT * FROM visitas WHERE id = ?').get(visitaId);
+          if (shouldNotifyOdooError(visitaRow)) {
+            const cliente = db.obtenerClientePorId(asignacion.cliente_id);
+            notifyOdooError({ where: 'asignacion', odooError, cliente, visitaId, asignacionId: req.params.id });
+          }
+        }
       }
     }
 
@@ -582,6 +635,12 @@ app.post('/api/visitas', requireAuth, async (req, res) => {
             odoo_last_sync: new Date().toISOString(),
             odoo_error: odooError
           });
+
+          const visitaRow = db.db.prepare('SELECT * FROM visitas WHERE id = ?').get(id);
+          if (shouldNotifyOdooError(visitaRow)) {
+            const cliente = db.obtenerClientePorId(cliente_id);
+            notifyOdooError({ where: 'visita', odooError, cliente, visitaId: id, asignacionId: null });
+          }
         }
       }
     }
