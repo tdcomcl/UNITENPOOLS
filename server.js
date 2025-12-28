@@ -459,7 +459,7 @@ app.post('/api/clientes/import', requireAuth, upload.single('file'), (req, res) 
   }
 });
 
-app.get('/api/clientes/:id', requireAuth, (req, res) => {
+app.get('/api/clientes/:id(\\d+)', requireAuth, (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden ver clientes' });
@@ -536,7 +536,7 @@ app.post('/api/clientes', requireAuth, (req, res) => {
   }
 });
 
-app.put('/api/clientes/:id', requireAuth, (req, res) => {
+app.put('/api/clientes/:id(\\d+)', requireAuth, (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden editar clientes' });
@@ -776,7 +776,7 @@ app.put('/api/asignaciones/:id', requireAuth, async (req, res) => {
 });
 
 // Visitas
-app.get('/api/clientes/:id/visitas', requireAuth, (req, res) => {
+app.get('/api/clientes/:id(\\d+)/visitas', requireAuth, (req, res) => {
   try {
     // Verificar que el cliente pertenece al responsable si es responsable
     if (req.responsableId) {
