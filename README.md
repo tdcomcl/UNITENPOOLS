@@ -21,6 +21,16 @@ Sistema web moderno para gestión de mantenimiento de piscinas. Aplicación web 
 npm install
 ```
 
+3. Configura variables de entorno (para envío de correos / Odoo):
+
+- Copia `env.example` a `.env` y ajusta valores:
+
+```bash
+cp env.example .env
+```
+
+> Nota: `.env` no se sube al repositorio (contiene credenciales).
+
 3. (Opcional) Importa tus datos desde Excel:
 ```bash
 npm run import

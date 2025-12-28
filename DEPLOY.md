@@ -41,6 +41,13 @@ cd UNITENPOOLS
 npm install
 ```
 
+### 5.1 Configurar variables de entorno (recomendado)
+
+```bash
+cp env.example .env
+nano .env
+```
+
 ### 6. Importar datos (opcional, si tienes el archivo Excel)
 ```bash
 # Si tienes el archivo Excel en el servidor

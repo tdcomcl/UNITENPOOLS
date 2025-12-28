@@ -41,3 +41,10 @@ logs/
 pm2-error.log
 pm2-out.log
 
+# Env (NO subir credenciales)
+.env
+.env.*
+
+# Archivos auxiliares locales (tests/cookies)
+cookies*.txt
+
