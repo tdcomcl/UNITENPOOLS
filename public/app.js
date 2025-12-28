@@ -6,6 +6,15 @@ const app = {
     responsables: [],
     asignaciones: [],
     currentUser: null,
+    pendingAsignaciones: new Set(),
+
+    showToast(message, type = 'info', ms = 2500) {
+        const el = document.createElement('div');
+        el.className = `toast toast-${type}`;
+        el.textContent = message;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), ms);
+    },
 
     async init() {
         // Verificar sesión
@@ -691,6 +700,22 @@ const app = {
 
     async marcarAsignacionRealizada(id, realizada) {
         try {
+            // Evitar doble click
+            if (this.pendingAsignaciones.has(id)) return;
+            this.pendingAsignaciones.add(id);
+
+            // Feedback inmediato
+            const card = document.querySelector(`.asignacion-item[data-asignacion-id="${id}"]`);
+            const btn = card?.querySelector('.asignacion-actions button');
+            const prevText = btn?.textContent;
+            if (btn) {
+                btn.classList.add('btn-loading');
+                btn.disabled = true;
+                btn.textContent = 'Por favor espere, registrando su visita';
+            } else {
+                this.showToast('Por favor espere, registrando su visita…', 'info', 2000);
+            }
+
             const res = await fetch(`${API_URL}/api/asignaciones/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -705,16 +730,17 @@ const app = {
             const data = await res.json().catch(() => null);
             if (!res.ok) {
                 const msg = data?.error || `HTTP ${res.status}`;
-                alert(`Error al actualizar la asignación: ${msg}`);
+                this.showToast(`Error: ${msg}`, 'error', 4000);
                 return;
             }
 
             // Mostrar resultado de emisión Odoo si aplica
             if (realizada) {
                 if (data?.odoo?.name) {
-                    alert(`✅ Asignación marcada realizada\nDocumento Odoo: ${data.odoo.name}\nEstado pago: ${data.odoo.payment_state || 'pendiente'}`);
+                    this.showToast(`✅ Visita registrada. Odoo: ${data.odoo.name} (${data.odoo.payment_state || 'pendiente'})`, 'success', 5000);
                 } else if (data?.odoo_error) {
-                    alert(`✅ Asignación marcada realizada\nPero Odoo falló al emitir:\n${data.odoo_error}\n\n(Quedó pendiente de emisión)`);
+                    this.showToast('✅ Visita registrada, pero quedó pendiente de emitir en Odoo', 'warning', 5000);
+                    setTimeout(() => alert(`Odoo falló al emitir:\n${data.odoo_error}\n\n(Quedó pendiente de emisión)`), 100);
                 }
             }
             
@@ -727,7 +753,19 @@ const app = {
             }
         } catch (error) {
             console.error('Error marcando asignación:', error);
-            alert('Error al actualizar la asignación');
+            this.showToast('Error al actualizar la asignación', 'error', 4000);
+        } finally {
+            this.pendingAsignaciones.delete(id);
+            const card = document.querySelector(`.asignacion-item[data-asignacion-id="${id}"]`);
+            const btn = card?.querySelector('.asignacion-actions button');
+            if (btn) {
+                btn.classList.remove('btn-loading');
+                btn.disabled = false;
+                // El texto real se recalcula al recargar; si no recargó, restaurar texto anterior
+                if (btn.textContent.includes('Por favor espere')) {
+                    btn.textContent = (typeof prevText === 'string' && prevText.trim()) ? prevText : 'Actualizar';
+                }
+            }
         }
     },
 
