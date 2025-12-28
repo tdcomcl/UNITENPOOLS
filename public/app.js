@@ -443,6 +443,7 @@ const app = {
                     <td class="actions">
                         <button class="btn btn-sm btn-primary" onclick="app.editarCliente(${cliente.id})">Editar</button>
                         <button class="btn btn-sm btn-success" onclick="app.abrirModalVisita(${cliente.id})">Registrar Visita</button>
+                        <button class="btn btn-sm btn-danger" onclick="app.eliminarCliente(${cliente.id})">Eliminar</button>
                     </td>
                 </tr>
             `).join('');
@@ -455,6 +456,27 @@ const app = {
                     <td>${cliente.comuna || '-'}</td>
                 </tr>
             `).join('');
+        }
+    },
+
+    async eliminarCliente(id) {
+        const ok = confirm('¿Eliminar este cliente?\n\nEsto lo desactiva (no se borra el historial).');
+        if (!ok) return;
+        try {
+            this.showToast('Eliminando cliente…', 'info', 2000);
+            const res = await fetch(`${API_URL}/api/clientes/${id}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.error || `Error HTTP ${res.status}`);
+            }
+            this.showToast('✅ Cliente eliminado (desactivado)', 'success', 3000);
+            await this.cargarClientes();
+        } catch (e) {
+            console.error(e);
+            this.showToast(`Error eliminando cliente: ${e?.message || e}`, 'error', 5000);
         }
     },
 

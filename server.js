@@ -605,6 +605,24 @@ app.put('/api/clientes/:id(\\d+)', requireAuth, (req, res) => {
   }
 });
 
+app.delete('/api/clientes/:id(\\d+)', requireAuth, (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden eliminar clientes' });
+    }
+    const cliente = db.obtenerClientePorId(req.params.id);
+    if (!cliente) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+
+    // Borrado lógico (recomendado): mantener historial de visitas/asignaciones
+    db.actualizarCliente(req.params.id, { activo: 0 });
+    res.json({ success: true, deleted: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Odoo (solo admin) - test y sync cliente
 app.get('/api/odoo/test', requireAuth, async (req, res) => {
   try {
