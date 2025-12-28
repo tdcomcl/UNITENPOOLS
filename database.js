@@ -95,12 +95,12 @@ class PiscinasDB {
     this.ensureColumn('clientes', 'invoice_email', 'invoice_email TEXT');
     this.ensureColumn('clientes', 'invoice_pais', 'invoice_pais TEXT');
 
-    // Default contable: si venía vacío o boleta, dejarlo en invoice (no pisa factura existente)
+    // Default contable: si venía vacío, dejarlo en invoice (NO debe pisar boleta/factura)
     try {
       this.db.prepare(`
         UPDATE clientes
         SET documento_tipo = 'invoice'
-        WHERE documento_tipo IS NULL OR documento_tipo = '' OR lower(documento_tipo) = 'boleta'
+        WHERE documento_tipo IS NULL OR documento_tipo = ''
       `).run();
     } catch (_) {
       // no-op
