@@ -171,51 +171,26 @@ async function getJournalIdForTipo(documentoTipo) {
   const tipo = mapDocumentoTipo(documentoTipo);
 
   // Permitir override por variables de entorno
-  if (tipo === 'boleta' && process.env.ODOO_JOURNAL_BOLETA_ID) {
-    return parseInt(process.env.ODOO_JOURNAL_BOLETA_ID, 10);
-  }
-  if (tipo === 'factura' && process.env.ODOO_JOURNAL_FACTURA_ID) {
-    return parseInt(process.env.ODOO_JOURNAL_FACTURA_ID, 10);
+  if ((tipo === 'boleta' || tipo === 'factura') && process.env.ODOO_JOURNAL_SALES_ID) {
+    return parseInt(process.env.ODOO_JOURNAL_SALES_ID, 10);
   }
   if (tipo === 'invoice' && process.env.ODOO_JOURNAL_INVOICE_ID) {
     return parseInt(process.env.ODOO_JOURNAL_INVOICE_ID, 10);
   }
 
-  // Defaults según tu configuración (validando que existan)
-  if (tipo === 'boleta') {
-    const defaultId = 39;
-    if (await journalExists(defaultId)) return defaultId;
-
-    // Fallback: buscar por nombre exacto o aproximado
+  // Boleta y Factura: usar el diario "Ventas"
+  if (tipo === 'boleta' || tipo === 'factura') {
+    const salesJournalName = process.env.ODOO_JOURNAL_SALES_NAME || 'Ventas';
     const byName =
-      (process.env.ODOO_JOURNAL_BOLETA_NAME
-        ? await findJournalIdByName({ name: process.env.ODOO_JOURNAL_BOLETA_NAME, type: 'sale' })
-        : null) ||
-      (await findJournalIdByNameLike({ nameLike: 'Boleta', type: 'sale' })) ||
-      (await findJournalIdByNameLike({ nameLike: 'Boletas', type: 'sale' }));
-
-    if (byName) return byName;
-    throw new Error(
-      `No se encontró el diario para Boleta. El ID ${defaultId} no existe/ no es accesible. ` +
-      `Configura ODOO_JOURNAL_BOLETA_ID o ODOO_JOURNAL_BOLETA_NAME`
-    );
-  }
-
-  if (tipo === 'factura') {
-    const defaultId = 33;
-    if (await journalExists(defaultId)) return defaultId;
-
-    const byName =
-      (process.env.ODOO_JOURNAL_FACTURA_NAME
-        ? await findJournalIdByName({ name: process.env.ODOO_JOURNAL_FACTURA_NAME, type: 'sale' })
-        : null) ||
+      (await findJournalIdByName({ name: salesJournalName, type: 'sale' })) ||
+      (await findJournalIdByNameLike({ nameLike: salesJournalName, type: 'sale' })) ||
       (await findJournalIdByNameLike({ nameLike: 'Ventas', type: 'sale' })) ||
       (await findJournalIdByNameLike({ nameLike: 'Sale', type: 'sale' }));
 
     if (byName) return byName;
     throw new Error(
-      `No se encontró el diario para Factura. El ID ${defaultId} no existe/ no es accesible. ` +
-      `Configura ODOO_JOURNAL_FACTURA_ID o ODOO_JOURNAL_FACTURA_NAME`
+      `No se encontró el diario de ventas '${salesJournalName}' para ${tipo}. ` +
+      `Configura ODOO_JOURNAL_SALES_ID o ODOO_JOURNAL_SALES_NAME`
     );
   }
 
