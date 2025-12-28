@@ -3,6 +3,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const db = require('./database');
@@ -67,6 +68,20 @@ app.use(express.static('public', {
 }));
 
 // Rutas API
+
+// Debug/version (útil para confirmar que el server corriendo tiene los últimos cambios)
+app.get('/api/version', (req, res) => {
+  let git = null;
+  try {
+    git = execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim();
+  } catch (_) {}
+  res.json({
+    ok: true,
+    git,
+    port: PORT,
+    node: process.version
+  });
+});
 
 // Autenticación
 app.post('/api/login', (req, res) => {

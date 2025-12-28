@@ -239,6 +239,7 @@ async function createInvoiceForVisit({ cliente, visita, partnerId }) {
 
   const tipo = mapDocumentoTipo(cliente.documento_tipo);
   const moveType = 'out_invoice';
+  console.log(`[Odoo] Emisión tipo=${tipo} usando journal_id=${journalId}`);
 
   const lineName = (process.env.ODOO_SERVICE_NAME || 'Servicio semanal de mantención de piscina');
   // El valor de la visita viene del cliente (precio_por_visita). Si viene precio en la visita, se usa como fallback.
