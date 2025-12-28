@@ -18,6 +18,13 @@ function callXmlRpc(client, method, params) {
   });
 }
 
+const _cache = {
+  modelFields: new Map(),
+  countryIdCL: null,
+  idTypeRUT: null,
+  latamDocTypeByCode: new Map()
+};
+
 async function authenticate() {
   const { url, db, username, password } = getOdooConfig();
   const common = xmlrpc.createClient({ url: `${url}/xmlrpc/2/common` });
@@ -40,8 +47,75 @@ async function testConnection() {
   return { ok: true, uid, config: { ...getOdooConfig(), password: '***' } };
 }
 
+async function getModelFields(model) {
+  if (_cache.modelFields.has(model)) return _cache.modelFields.get(model);
+  const fields = await executeKw({
+    model,
+    method: 'fields_get',
+    args: [],
+    kwargs: { attributes: ['type', 'string', 'selection', 'relation'] }
+  });
+  _cache.modelFields.set(model, fields || {});
+  return fields || {};
+}
+
+function pickSelectionKey(fieldsGet, fieldName, labelRegex) {
+  const f = fieldsGet?.[fieldName];
+  const sel = f?.selection;
+  if (!Array.isArray(sel)) return null;
+  const hit = sel.find(([key, label]) => labelRegex.test(String(label || '')));
+  return hit ? hit[0] : null;
+}
+
+async function getCountryIdCL() {
+  if (_cache.countryIdCL) return _cache.countryIdCL;
+  const ids = await executeKw({
+    model: 'res.country',
+    method: 'search',
+    args: [[['code', '=', 'CL']]],
+    kwargs: { limit: 1 }
+  });
+  if (!Array.isArray(ids) || ids.length === 0) return null;
+  _cache.countryIdCL = ids[0];
+  return _cache.countryIdCL;
+}
+
+async function getIdentificationTypeIdRUT() {
+  if (_cache.idTypeRUT) return _cache.idTypeRUT;
+  // Chile localization uses l10n_latam.identification.type
+  const ids = await executeKw({
+    model: 'l10n_latam.identification.type',
+    method: 'search',
+    args: [[['name', 'ilike', 'RUT']]],
+    kwargs: { limit: 1 }
+  });
+  if (!Array.isArray(ids) || ids.length === 0) return null;
+  _cache.idTypeRUT = ids[0];
+  return _cache.idTypeRUT;
+}
+
+async function getLatamDocumentTypeIdByCode(code) {
+  const key = String(code);
+  if (_cache.latamDocTypeByCode.has(key)) return _cache.latamDocTypeByCode.get(key);
+
+  const countryId = await getCountryIdCL();
+  const domain = [['code', '=', key]];
+  if (countryId) domain.push(['country_id', '=', countryId]);
+
+  const ids = await executeKw({
+    model: 'l10n_latam.document.type',
+    method: 'search',
+    args: [domain],
+    kwargs: { limit: 1 }
+  });
+  const id = Array.isArray(ids) && ids.length > 0 ? ids[0] : null;
+  _cache.latamDocTypeByCode.set(key, id);
+  return id;
+}
+
 async function upsertPartnerFromCliente(cliente) {
   // Campos base mínimos en Odoo (res.partner)
+  const partnerFields = await getModelFields('res.partner');
   const values = {
     name: cliente.nombre || 'Sin nombre',
     vat: cliente.rut || false,
@@ -52,6 +126,33 @@ async function upsertPartnerFromCliente(cliente) {
     is_company: false,
     company_type: 'person'
   };
+
+  // Forzar Chile para evitar que Odoo lo trate como extranjero
+  const countryId = await getCountryIdCL();
+  if (countryId && partnerFields?.country_id) {
+    values.country_id = countryId;
+  }
+
+  // Tipo identificación (RUT) si viene rut
+  const idTypeRUT = await getIdentificationTypeIdRUT();
+  if (idTypeRUT && partnerFields?.l10n_latam_identification_type_id) {
+    values.l10n_latam_identification_type_id = cliente.rut ? idTypeRUT : false;
+  }
+
+  // Tipo contribuyente según documento del cliente
+  // - Boleta: Consumidor Final
+  // - Factura: IVA Afecto (1ª categoría)
+  // (Lo resolvemos por label para no depender del código interno.)
+  if (partnerFields?.l10n_cl_sii_taxpayer_type) {
+    const tipo = (cliente.documento_tipo || 'invoice').toLowerCase();
+    if (tipo === 'boleta') {
+      const key = pickSelectionKey(partnerFields, 'l10n_cl_sii_taxpayer_type', /consumidor/i);
+      if (key) values.l10n_cl_sii_taxpayer_type = key;
+    } else if (tipo === 'factura') {
+      const key = pickSelectionKey(partnerFields, 'l10n_cl_sii_taxpayer_type', /afecto/i);
+      if (key) values.l10n_cl_sii_taxpayer_type = key;
+    }
+  }
 
   // Buscar partner existente: prioridad RUT, luego email, luego nombre+street
   let domain = [];
@@ -259,13 +360,19 @@ async function createInvoiceForVisit({ cliente, visita, partnerId }) {
     }]]
   };
 
-  // Si tienes IDs específicos para documentos (Latam), puedes configurarlos por env.
-  // Nota: esto depende de módulos de localización instalados en Odoo.
-  if (tipo === 'factura' && process.env.ODOO_DOC_TYPE_FACTURA_ID) {
-    moveVals.l10n_latam_document_type_id = parseInt(process.env.ODOO_DOC_TYPE_FACTURA_ID, 10);
+  // Clase de documento Chile (si está instalado l10n_latam/l10n_cl)
+  // Factura: 33, Boleta: 39
+  if (tipo === 'factura') {
+    const id = process.env.ODOO_DOC_TYPE_FACTURA_ID
+      ? parseInt(process.env.ODOO_DOC_TYPE_FACTURA_ID, 10)
+      : await getLatamDocumentTypeIdByCode('33');
+    if (id) moveVals.l10n_latam_document_type_id = id;
   }
-  if (tipo === 'boleta' && process.env.ODOO_DOC_TYPE_BOLETA_ID) {
-    moveVals.l10n_latam_document_type_id = parseInt(process.env.ODOO_DOC_TYPE_BOLETA_ID, 10);
+  if (tipo === 'boleta') {
+    const id = process.env.ODOO_DOC_TYPE_BOLETA_ID
+      ? parseInt(process.env.ODOO_DOC_TYPE_BOLETA_ID, 10)
+      : await getLatamDocumentTypeIdByCode('39');
+    if (id) moveVals.l10n_latam_document_type_id = id;
   }
 
   const moveId = await executeKw({
