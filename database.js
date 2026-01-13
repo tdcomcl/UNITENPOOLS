@@ -1,7 +1,17 @@
-const Database = require('better-sqlite3');
+require('dotenv').config();
 const path = require('path');
 
-class PiscinasDB {
+// Detectar tipo de BD desde variables de entorno
+const dbType = process.env.DB_TYPE || 'sqlite';
+
+// Si es PostgreSQL, cargar el módulo correspondiente
+if (dbType === 'postgresql') {
+  module.exports = require('./database_postgresql');
+} else {
+  // SQLite (comportamiento original)
+  const Database = require('better-sqlite3');
+
+  class PiscinasDB {
   constructor(dbPath = 'piscinas.db') {
     this.db = new Database(dbPath);
     this.initDatabase();
@@ -609,9 +619,10 @@ class PiscinasDB {
       a.responsable_nombre.localeCompare(b.responsable_nombre)
     );
   }
-}
+  }
 
-// Exportar instancia única
-const db = new PiscinasDB();
-module.exports = db;
+  // Exportar instancia única
+  const db = new PiscinasDB();
+  module.exports = db;
+}
 

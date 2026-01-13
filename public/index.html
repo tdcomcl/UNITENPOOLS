@@ -393,6 +393,26 @@
         </div>
     </div>
 
+    <!-- Modal Contraseña Importación Excel -->
+    <div id="excel-import-password-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="app.closeModal('excel-import-password-modal')">&times;</span>
+            <h2>🔒 Contraseña de Importación</h2>
+            <p style="color: #666; margin-bottom: 1rem;">Se requiere contraseña para importar archivos Excel.</p>
+            <form id="excel-import-password-form" onsubmit="app.verificarPasswordImportExcel(event)">
+                <div class="form-group">
+                    <label>Contraseña *</label>
+                    <input type="password" id="excel-import-password" required autofocus placeholder="Ingresa la contraseña">
+                </div>
+                <div id="excel-import-password-error" style="color: #dc3545; margin-bottom: 1rem; display: none;"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="app.closeModal('excel-import-password-modal')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Continuar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="app.js?v=7.0"></script>
 </body>
 </html>

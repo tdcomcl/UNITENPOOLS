@@ -1,5 +1,13 @@
 const API_URL = '';
 
+// Función helper para formatear precios sin decimales pero con separador de miles
+function formatearPrecio(precio) {
+    if (!precio && precio !== 0) return '0';
+    const num = typeof precio === 'number' ? precio : parseFloat(precio);
+    if (isNaN(num)) return '0';
+    return Math.round(num).toLocaleString('es-CL');
+}
+
 const app = {
     currentPage: 'dashboard',
     clientes: [],
@@ -7,6 +15,7 @@ const app = {
     asignaciones: [],
     currentUser: null,
     pendingAsignaciones: new Set(),
+    excelImportPassword: null,  // Almacenar contraseña temporalmente después de verificación
 
     showToast(message, type = 'info', ms = 2500) {
         const el = document.createElement('div');
@@ -236,9 +245,89 @@ const app = {
     },
 
     seleccionarImportExcelClientes() {
-        const input = document.getElementById('clientes-import-file');
-        if (!input) return;
-        input.click();
+        // Mostrar modal de contraseña primero
+        this.showModal('excel-import-password-modal');
+        // Limpiar campo de contraseña
+        const passwordInput = document.getElementById('excel-import-password');
+        if (passwordInput) {
+            passwordInput.value = '';
+            passwordInput.focus();
+        }
+        const errorDiv = document.getElementById('excel-import-password-error');
+        if (errorDiv) {
+            errorDiv.style.display = 'none';
+            errorDiv.textContent = '';
+        }
+    },
+
+    async verificarPasswordImportExcel(event) {
+        event.preventDefault();
+        const passwordInput = document.getElementById('excel-import-password');
+        const errorDiv = document.getElementById('excel-import-password-error');
+        const password = passwordInput?.value || '';
+
+        if (!password) {
+            if (errorDiv) {
+                errorDiv.textContent = 'Por favor ingresa la contraseña';
+                errorDiv.style.display = 'block';
+            }
+            return;
+        }
+
+        try {
+            // Verificar contraseña en el backend
+            const res = await fetch(`${API_URL}/api/clientes/import/verify-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ password })
+            });
+
+            const data = await res.json().catch(() => ({}));
+            
+            if (!res.ok || !data.valid) {
+                if (errorDiv) {
+                    errorDiv.textContent = data.error || 'Contraseña incorrecta';
+                    errorDiv.style.display = 'block';
+                }
+                passwordInput.value = '';
+                passwordInput.focus();
+                return;
+            }
+
+            // Contraseña correcta: guardar contraseña temporalmente para usarla en la importación
+            this.excelImportPassword = password;
+            
+            // Obtener el input
+            const input = document.getElementById('clientes-import-file');
+            if (!input) {
+                console.error('No se encontró el input de archivo con ID: clientes-import-file');
+                this.showToast('Error: No se encontró el selector de archivos', 'error', 3000);
+                return;
+            }
+            
+            // IMPORTANTE: Hacer click ANTES de cerrar el modal
+            // Los navegadores modernos requieren que el click en input file sea parte de la misma cadena de interacción del usuario
+            try {
+                input.click();
+                console.log('Selector de archivos abierto');
+                
+                // Cerrar modal después de abrir el selector
+                // Usar un pequeño delay para que el selector se abra primero
+                setTimeout(() => {
+                    this.closeModal('excel-import-password-modal');
+                }, 50);
+            } catch (err) {
+                console.error('Error al abrir selector de archivos:', err);
+                this.showToast('Error: No se pudo abrir el selector de archivos', 'error', 3000);
+            }
+        } catch (e) {
+            console.error('Error verificando contraseña:', e);
+            if (errorDiv) {
+                errorDiv.textContent = 'Error al verificar contraseña. Intenta nuevamente.';
+                errorDiv.style.display = 'block';
+            }
+        }
     },
 
     async descargarClientesExcel() {
@@ -296,15 +385,25 @@ const app = {
 
     async importarClientesExcel(file) {
         try {
+            // Verificar que tenemos la contraseña
+            if (!this.excelImportPassword) {
+                this.showToast('Error: Contraseña no verificada. Por favor intenta nuevamente.', 'error', 5000);
+                return;
+            }
+
             this.showToast('Por favor espere… importando Excel de clientes', 'info', 2500);
             const fd = new FormData();
             fd.append('file', file);
+            fd.append('password', this.excelImportPassword);
 
             const res = await fetch(`${API_URL}/api/clientes/import`, {
                 method: 'POST',
                 body: fd,
                 credentials: 'include'
             });
+
+            // Limpiar contraseña después de usarla
+            this.excelImportPassword = null;
 
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
@@ -318,6 +417,8 @@ const app = {
         } catch (e) {
             console.error(e);
             this.showToast(`Error importando Excel: ${e?.message || e}`, 'error', 5000);
+            // Limpiar contraseña en caso de error
+            this.excelImportPassword = null;
         }
     },
 
@@ -439,7 +540,7 @@ const app = {
                     <td><span class="tag tag-info">${docLabel(cliente.documento_tipo)}</span></td>
                     <td>${cliente.responsable_nombre || '<span class="tag tag-danger">Sin asignar</span>'}</td>
                     <td>${cliente.dia_atencion || '-'}</td>
-                    <td>$${cliente.precio_por_visita?.toLocaleString() || '0'}</td>
+                    <td>$${formatearPrecio(cliente.precio_por_visita)}</td>
                     <td class="actions">
                         <button class="btn btn-sm btn-primary" onclick="app.editarCliente(${cliente.id})">Editar</button>
                         <button class="btn btn-sm btn-success" onclick="app.abrirModalVisita(${cliente.id})">Registrar Visita</button>
@@ -764,7 +865,7 @@ const app = {
                                     <div class="asignacion-info">
                                         <h4>${asig.cliente_nombre}</h4>
                                         <p>${asig.direccion || ''} ${asig.comuna || ''}</p>
-                                        <p>Responsable: ${asig.responsable_nombre || 'Sin asignar'}${this.currentUser?.rol === 'admin' ? ` | Precio: $${asig.precio?.toLocaleString() || '0'}` : ''}</p>
+                                        <p>Responsable: ${asig.responsable_nombre || 'Sin asignar'}${this.currentUser?.rol === 'admin' ? ` | Precio: $${formatearPrecio(asig.precio)}` : ''}</p>
                                         <div class="asignacion-nota" id="nota-${asig.id}">
                                             ${asig.notas && asig.notas.trim() !== '' ? `<p class="nota-text"><strong>Nota:</strong> ${asig.notas.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\n/g, '<br>')}</p>` : ''}
                                             <button class="btn-link" onclick="app.editarNota(${asig.id})" style="font-size: 0.85rem; color: var(--primary); text-decoration: none; border: none; background: none; cursor: pointer; padding: 0;">
@@ -1070,7 +1171,7 @@ const app = {
                                     <div class="asignacion-info">
                                         <h4>${asig.cliente_nombre}</h4>
                                         <p>${asig.direccion || ''} ${asig.comuna || ''}</p>
-                                        <p>Responsable: ${asig.responsable_nombre || 'Sin asignar'} | Precio: $${asig.precio?.toLocaleString() || '0'}</p>
+                                        <p>Responsable: ${asig.responsable_nombre || 'Sin asignar'} | Precio: $${formatearPrecio(asig.precio)}</p>
                                         <div class="nota-display">
                                             <p class="nota-text-large"><strong>Nota:</strong> ${asig.notas.replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\n/g, '<br>')}</p>
                                             <button class="btn btn-sm btn-primary" onclick="app.editarNota(${asig.id})" style="margin-top: 0.5rem;">

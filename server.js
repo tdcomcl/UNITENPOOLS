@@ -45,9 +45,9 @@ async function notifyOdooError({ where, odooError, cliente, visitaId, asignacion
     await mailer.sendOdooErrorEmail({ subject, text });
 
     if (visitaId) {
-      const row = db.db.prepare('SELECT odoo_notify_count FROM visitas WHERE id = ?').get(visitaId);
+      const row = await db.db.prepare('SELECT odoo_notify_count FROM visitas WHERE id = ?').get(visitaId);
       const next = (row?.odoo_notify_count || 0) + 1;
-      db.actualizarVisita(visitaId, {
+      await db.actualizarVisita(visitaId, {
         odoo_notified_at: new Date().toISOString(),
         odoo_notify_count: next
       });
@@ -136,14 +136,14 @@ app.get('/api/version', (req, res) => {
 });
 
 // Autenticación
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {
       return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
     }
 
-    const usuario = db.verificarPassword(username, password);
+    const usuario = await db.verificarPassword(username, password);
     if (!usuario) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
@@ -187,19 +187,19 @@ app.get('/api/session', (req, res) => {
   }
 });
 
-app.get('/api/usuarios', requireAuth, (req, res) => {
+app.get('/api/usuarios', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'No tienes permisos para ver usuarios' });
     }
-    const usuarios = db.obtenerUsuarios();
+    const usuarios = await db.obtenerUsuarios();
     res.json(usuarios);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/usuarios', requireAuth, (req, res) => {
+app.post('/api/usuarios', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'No tienes permisos para crear usuarios' });
@@ -208,7 +208,7 @@ app.post('/api/usuarios', requireAuth, (req, res) => {
     if (!username || !password) {
       return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
     }
-    const id = db.crearUsuario(username, password, responsable_id || null, rol || 'responsable');
+    const id = await db.crearUsuario(username, password, responsable_id || null, rol || 'responsable');
     res.json({ id, success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -216,16 +216,16 @@ app.post('/api/usuarios', requireAuth, (req, res) => {
 });
 
 // Responsables
-app.get('/api/responsables', requireAuth, (req, res) => {
+app.get('/api/responsables', requireAuth, async (req, res) => {
   try {
-    const responsables = db.obtenerResponsables();
+    const responsables = await db.obtenerResponsables();
     res.json(responsables);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/responsables', requireAuth, (req, res) => {
+app.post('/api/responsables', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden crear responsables' });
@@ -234,7 +234,7 @@ app.post('/api/responsables', requireAuth, (req, res) => {
     if (!nombre) {
       return res.status(400).json({ error: 'El nombre es obligatorio' });
     }
-    const id = db.agregarResponsable(nombre);
+    const id = await db.agregarResponsable(nombre);
     res.json({ id, nombre, activo: 1 });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -242,25 +242,25 @@ app.post('/api/responsables', requireAuth, (req, res) => {
 });
 
 // Clientes
-app.get('/api/clientes', requireAuth, (req, res) => {
+app.get('/api/clientes', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden ver clientes' });
     }
-    const clientes = db.obtenerClientes(true, null);
+    const clientes = await db.obtenerClientes(true, null);
     res.json(clientes);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/clientes/export', requireAuth, (req, res) => {
+app.get('/api/clientes/export', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden exportar clientes' });
     }
 
-    const clientes = db.obtenerClientes(false, null); // incluir activos e inactivos
+    const clientes = await db.obtenerClientes(false, null); // incluir activos e inactivos
     const rows = clientes.map(c => ({
       id: c.id,
       nombre: c.nombre || '',
@@ -302,11 +302,38 @@ app.get('/api/clientes/export', requireAuth, (req, res) => {
   }
 });
 
-app.post('/api/clientes/import', requireAuth, upload.single('file'), (req, res) => {
+// Endpoint para verificar contraseña de importación
+app.post('/api/clientes/import/verify-password', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden importar clientes' });
     }
+    const { password } = req.body;
+    const expectedPassword = process.env.EXCEL_IMPORT_PASSWORD || 'import2024';
+    
+    if (!password || password !== expectedPassword) {
+      return res.json({ valid: false, error: 'Contraseña incorrecta' });
+    }
+    
+    res.json({ valid: true });
+  } catch (error) {
+    res.status(500).json({ valid: false, error: error.message });
+  }
+});
+
+app.post('/api/clientes/import', requireAuth, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden importar clientes' });
+    }
+    
+    // Verificar contraseña
+    const password = req.body.password;
+    const expectedPassword = process.env.EXCEL_IMPORT_PASSWORD || 'import2024';
+    if (!password || password !== expectedPassword) {
+      return res.status(403).json({ error: 'Contraseña de importación incorrecta' });
+    }
+    
     if (!req.file || !req.file.buffer) {
       return res.status(400).json({ error: 'Archivo Excel no recibido (campo: file)' });
     }
@@ -354,117 +381,113 @@ app.post('/api/clientes/import', requireAuth, upload.single('file'), (req, res) 
       return s; // fallback (por si usan valores internos)
     };
 
-    const run = db.db.transaction((rows) => {
-      const result = { created: 0, updated: 0, skipped: 0, errors: [] };
+    const result = { created: 0, updated: 0, skipped: 0, errors: [] };
 
-      rows.forEach((r, idx) => {
-        try {
-          const id = toInt(pick(r, ['id', 'ID', 'Id']));
-          const nombre = toStr(pick(r, ['nombre', 'Nombre'])) || '';
-          if (!nombre.trim()) {
-            result.skipped++;
-            result.errors.push({ row: idx + 2, error: 'Falta nombre' });
-            return;
-          }
-
-          const responsableId = toInt(pick(r, ['responsable_id', 'responsable id', 'id_responsable']));
-          const responsableNombre = toStr(pick(r, ['responsable', 'Responsable']));
-          let resolvedResponsableId = responsableId;
-          if (!resolvedResponsableId && responsableNombre) {
-            resolvedResponsableId = db.agregarResponsable(responsableNombre);
-          }
-
-          const payload = {
-            nombre: nombre,
-            rut: toStr(pick(r, ['rut', 'RUT'])),
-            direccion: toStr(pick(r, ['direccion', 'dirección'])),
-            comuna: toStr(pick(r, ['comuna'])),
-            celular: toStr(pick(r, ['celular', 'telefono', 'teléfono'])),
-            email: toStr(pick(r, ['email', 'correo', 'correo electrónico', 'correo electronico'])),
-            documento_tipo: normalizeDocTipo(pick(r, ['documento_tipo', 'documento', 'tipo_documento', 'tipo documento'])),
-            responsable_id: resolvedResponsableId,
-            dia_atencion: toStr(pick(r, ['dia_atencion', 'día', 'dia', 'día_atencion'])),
-            precio_por_visita: toNum(pick(r, ['precio_por_visita', 'precio', 'valor'])),
-            activo: (() => {
-              const v = pick(r, ['activo', 'Activo']);
-              if (v === '' || v === null || v === undefined) return undefined;
-              const s = String(v).trim().toLowerCase();
-              if (s === '1' || s === 'si' || s === 'sí' || s === 'true') return 1;
-              if (s === '0' || s === 'no' || s === 'false') return 0;
-              const n = toInt(v);
-              return n === null ? undefined : (n ? 1 : 0);
-            })(),
-            notas: toStr(pick(r, ['notas', 'Notas'])),
-            factura_razon_social: toStr(pick(r, ['factura_razon_social', 'razon social', 'razón social'])),
-            factura_rut: toStr(pick(r, ['factura_rut', 'rut factura'])),
-            factura_giro: toStr(pick(r, ['factura_giro', 'giro'])),
-            factura_direccion: toStr(pick(r, ['factura_direccion', 'direccion factura', 'dirección factura'])),
-            factura_comuna: toStr(pick(r, ['factura_comuna', 'comuna factura'])),
-            factura_email: toStr(pick(r, ['factura_email', 'correo factura', 'email factura']))
-          };
-
-          // Normalizar nulls / defaults
-          if (payload.precio_por_visita === null) payload.precio_por_visita = 0;
-          if (!payload.documento_tipo) payload.documento_tipo = 'invoice';
-
-          if (id) {
-            const exists = db.obtenerClientePorId(id);
-            if (exists) {
-              db.actualizarCliente(id, payload);
-              result.updated++;
-              return;
-            }
-          }
-
-          const newId = db.agregarCliente({
-            nombre: payload.nombre,
-            rut: payload.rut,
-            direccion: payload.direccion,
-            comuna: payload.comuna,
-            celular: payload.celular,
-            email: payload.email,
-            documento_tipo: payload.documento_tipo || 'invoice',
-            factura_razon_social: payload.factura_razon_social,
-            factura_rut: payload.factura_rut,
-            factura_giro: payload.factura_giro,
-            factura_direccion: payload.factura_direccion,
-            factura_comuna: payload.factura_comuna,
-            factura_email: payload.factura_email,
-            responsable_id: payload.responsable_id,
-            dia_atencion: payload.dia_atencion,
-            precio_por_visita: payload.precio_por_visita
-          });
-
-          // Setear campos que no están en agregarCliente (activo/notas)
-          const post = {};
-          if (payload.activo !== undefined) post.activo = payload.activo;
-          if (payload.notas !== undefined) post.notas = payload.notas;
-          if (Object.keys(post).length > 0) {
-            db.actualizarCliente(newId, post);
-          }
-
-          result.created++;
-        } catch (e) {
-          result.errors.push({ row: idx + 2, error: e?.message || String(e) });
+    for (let idx = 0; idx < rawRows.length; idx++) {
+      const r = rawRows[idx];
+      try {
+        const id = toInt(pick(r, ['id', 'ID', 'Id']));
+        const nombre = toStr(pick(r, ['nombre', 'Nombre'])) || '';
+        if (!nombre.trim()) {
+          result.skipped++;
+          result.errors.push({ row: idx + 2, error: 'Falta nombre' });
+          continue;
         }
-      });
 
-      return result;
-    });
+        const responsableId = toInt(pick(r, ['responsable_id', 'responsable id', 'id_responsable']));
+        const responsableNombre = toStr(pick(r, ['responsable', 'Responsable']));
+        let resolvedResponsableId = responsableId;
+        if (!resolvedResponsableId && responsableNombre) {
+          resolvedResponsableId = await db.agregarResponsable(responsableNombre);
+        }
 
-    const summary = run(rawRows);
-    res.json({ success: true, ...summary });
+        const payload = {
+          nombre: nombre,
+          rut: toStr(pick(r, ['rut', 'RUT'])),
+          direccion: toStr(pick(r, ['direccion', 'dirección'])),
+          comuna: toStr(pick(r, ['comuna'])),
+          celular: toStr(pick(r, ['celular', 'telefono', 'teléfono'])),
+          email: toStr(pick(r, ['email', 'correo', 'correo electrónico', 'correo electronico'])),
+          documento_tipo: normalizeDocTipo(pick(r, ['documento_tipo', 'documento', 'tipo_documento', 'tipo documento'])),
+          responsable_id: resolvedResponsableId,
+          dia_atencion: toStr(pick(r, ['dia_atencion', 'día', 'dia', 'día_atencion'])),
+          precio_por_visita: toNum(pick(r, ['precio_por_visita', 'precio', 'valor'])),
+          activo: (() => {
+            const v = pick(r, ['activo', 'Activo']);
+            if (v === '' || v === null || v === undefined) return undefined;
+            const s = String(v).trim().toLowerCase();
+            if (s === '1' || s === 'si' || s === 'sí' || s === 'true') return 1;
+            if (s === '0' || s === 'no' || s === 'false') return 0;
+            const n = toInt(v);
+            return n === null ? undefined : (n ? 1 : 0);
+          })(),
+          notas: toStr(pick(r, ['notas', 'Notas'])),
+          factura_razon_social: toStr(pick(r, ['factura_razon_social', 'razon social', 'razón social'])),
+          factura_rut: toStr(pick(r, ['factura_rut', 'rut factura'])),
+          factura_giro: toStr(pick(r, ['factura_giro', 'giro'])),
+          factura_direccion: toStr(pick(r, ['factura_direccion', 'direccion factura', 'dirección factura'])),
+          factura_comuna: toStr(pick(r, ['factura_comuna', 'comuna factura'])),
+          factura_email: toStr(pick(r, ['factura_email', 'correo factura', 'email factura']))
+        };
+
+        // Normalizar nulls / defaults
+        if (payload.precio_por_visita === null) payload.precio_por_visita = 0;
+        if (!payload.documento_tipo) payload.documento_tipo = 'invoice';
+
+        if (id) {
+          const exists = await db.obtenerClientePorId(id);
+          if (exists) {
+            await db.actualizarCliente(id, payload);
+            result.updated++;
+            continue;
+          }
+        }
+
+        const newId = await db.agregarCliente({
+          nombre: payload.nombre,
+          rut: payload.rut,
+          direccion: payload.direccion,
+          comuna: payload.comuna,
+          celular: payload.celular,
+          email: payload.email,
+          documento_tipo: payload.documento_tipo || 'invoice',
+          factura_razon_social: payload.factura_razon_social,
+          factura_rut: payload.factura_rut,
+          factura_giro: payload.factura_giro,
+          factura_direccion: payload.factura_direccion,
+          factura_comuna: payload.factura_comuna,
+          factura_email: payload.factura_email,
+          responsable_id: payload.responsable_id,
+          dia_atencion: payload.dia_atencion,
+          precio_por_visita: payload.precio_por_visita
+        });
+
+        // Setear campos que no están en agregarCliente (activo/notas)
+        const post = {};
+        if (payload.activo !== undefined) post.activo = payload.activo;
+        if (payload.notas !== undefined) post.notas = payload.notas;
+        if (Object.keys(post).length > 0) {
+          await db.actualizarCliente(newId, post);
+        }
+
+        result.created++;
+      } catch (e) {
+        result.errors.push({ row: idx + 2, error: e?.message || String(e) });
+      }
+    }
+
+    res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/clientes/:id(\\d+)', requireAuth, (req, res) => {
+app.get('/api/clientes/:id(\\d+)', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden ver clientes' });
     }
-    const cliente = db.obtenerClientePorId(req.params.id);
+    const cliente = await db.obtenerClientePorId(req.params.id);
     if (!cliente) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
@@ -474,7 +497,7 @@ app.get('/api/clientes/:id(\\d+)', requireAuth, (req, res) => {
   }
 });
 
-app.post('/api/clientes', requireAuth, (req, res) => {
+app.post('/api/clientes', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden crear clientes' });
@@ -506,7 +529,7 @@ app.post('/api/clientes', requireAuth, (req, res) => {
     if (!nombre) {
       return res.status(400).json({ error: 'El nombre es obligatorio' });
     }
-    const id = db.agregarCliente({
+    const id = await db.agregarCliente({
       nombre,
       rut: rut || null,
       direccion,
@@ -536,12 +559,12 @@ app.post('/api/clientes', requireAuth, (req, res) => {
   }
 });
 
-app.put('/api/clientes/:id(\\d+)', requireAuth, (req, res) => {
+app.put('/api/clientes/:id(\\d+)', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden editar clientes' });
     }
-    const cliente = db.obtenerClientePorId(req.params.id);
+    const cliente = await db.obtenerClientePorId(req.params.id);
     if (!cliente) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
@@ -598,25 +621,25 @@ app.put('/api/clientes/:id(\\d+)', requireAuth, (req, res) => {
       activo
     };
 
-    db.actualizarCliente(req.params.id, updates);
+    await db.actualizarCliente(req.params.id, updates);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.delete('/api/clientes/:id(\\d+)', requireAuth, (req, res) => {
+app.delete('/api/clientes/:id(\\d+)', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden eliminar clientes' });
     }
-    const cliente = db.obtenerClientePorId(req.params.id);
+    const cliente = await db.obtenerClientePorId(req.params.id);
     if (!cliente) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
 
     // Borrado lógico (recomendado): mantener historial de visitas/asignaciones
-    db.actualizarCliente(req.params.id, { activo: 0 });
+    await db.actualizarCliente(req.params.id, { activo: 0 });
     res.json({ success: true, deleted: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -642,13 +665,13 @@ app.post('/api/odoo/clientes/:id/sync', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Solo administradores pueden sincronizar con Odoo' });
     }
 
-    const cliente = db.obtenerClientePorId(req.params.id);
+    const cliente = await db.obtenerClientePorId(req.params.id);
     if (!cliente) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
 
     const { partnerId, action } = await odoo.upsertPartnerFromCliente(cliente);
-    db.actualizarCliente(req.params.id, {
+    await db.actualizarCliente(req.params.id, {
       odoo_partner_id: partnerId,
       odoo_last_sync: new Date().toISOString()
     });
@@ -660,32 +683,32 @@ app.post('/api/odoo/clientes/:id/sync', requireAuth, async (req, res) => {
 });
 
 // Asignaciones semanales
-app.get('/api/asignaciones/:semana', requireAuth, (req, res) => {
+app.get('/api/asignaciones/:semana', requireAuth, async (req, res) => {
   try {
-    const asignaciones = db.obtenerAsignacionesSemana(req.params.semana, req.responsableId);
+    const asignaciones = await db.obtenerAsignacionesSemana(req.params.semana, req.responsableId);
     res.json(asignaciones);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/asignaciones/semana-actual', requireAuth, (req, res) => {
+app.get('/api/asignaciones/semana-actual', requireAuth, async (req, res) => {
   try {
     const semanaActual = db.obtenerSemanaActual();
-    const asignaciones = db.obtenerAsignacionesSemana(semanaActual, req.responsableId);
+    const asignaciones = await db.obtenerAsignacionesSemana(semanaActual, req.responsableId);
     res.json({ semana: semanaActual, asignaciones });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/asignaciones/asignar-semana-actual', requireAuth, (req, res) => {
+app.post('/api/asignaciones/asignar-semana-actual', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden asignar semanas' });
     }
     const semanaActual = db.obtenerSemanaActual();
-    const asignados = db.asignarClientesSemana(semanaActual);
+    const asignados = await db.asignarClientesSemana(semanaActual);
     res.json({ semana: semanaActual, asignados, success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -695,7 +718,7 @@ app.post('/api/asignaciones/asignar-semana-actual', requireAuth, (req, res) => {
 app.put('/api/asignaciones/:id', requireAuth, async (req, res) => {
   try {
     // Si es responsable, solo puede marcar como realizada sus propias asignaciones
-    const asignacion = db.db.prepare('SELECT * FROM asignaciones_semanales WHERE id = ?').get(req.params.id);
+    const asignacion = await db.obtenerAsignacionPorId(req.params.id);
     if (!asignacion) {
       return res.status(404).json({ error: 'Asignación no encontrada' });
     }
@@ -720,7 +743,7 @@ app.put('/api/asignaciones/:id', requireAuth, async (req, res) => {
     
     console.log(`[API] Updates a aplicar:`, updates);
     
-    db.actualizarAsignacion(req.params.id, updates);
+    await db.actualizarAsignacion(req.params.id, updates);
     
     // Si se marcó como realizada, crear 1 visita por asignación (si no existe) y emitir documento en Odoo.
     let odooResult = null;
@@ -733,20 +756,20 @@ app.put('/api/asignaciones/:id', requireAuth, async (req, res) => {
         // 1) Asegurar 1 visita por asignación
         if (!visitaId) {
           // Registrar visita (precio NULL => usa precio_por_visita del cliente)
-          visitaId = db.registrarVisita(asignacion.cliente_id, hoy, asignacion.responsable_id || null, null, true);
-          db.actualizarAsignacion(req.params.id, { visita_id: visitaId });
+          visitaId = await db.registrarVisita(asignacion.cliente_id, hoy, asignacion.responsable_id || null, null, true);
+          await db.actualizarAsignacion(req.params.id, { visita_id: visitaId });
         }
 
         // 2) Emitir documento SI no existe aún para esa visita (idempotente)
         const visitaRow = visitaId
-          ? db.db.prepare('SELECT * FROM visitas WHERE id = ?').get(visitaId)
+          ? await db.obtenerVisitaPorId(visitaId)
           : null;
 
         if (visitaRow && !visitaRow.odoo_move_id) {
-          const cliente = db.obtenerClientePorId(asignacion.cliente_id);
+          const cliente = await db.obtenerClientePorId(asignacion.cliente_id);
           if (cliente) {
             const { partnerId } = await odoo.upsertPartnerFromCliente(cliente);
-            db.actualizarCliente(asignacion.cliente_id, {
+            await db.actualizarCliente(asignacion.cliente_id, {
               odoo_partner_id: partnerId,
               odoo_last_sync: new Date().toISOString()
             });
@@ -755,7 +778,7 @@ app.put('/api/asignaciones/:id', requireAuth, async (req, res) => {
               visita: { id: visitaId, fecha_visita: hoy, precio: null },
               partnerId
             });
-            db.actualizarVisita(visitaId, {
+            await db.actualizarVisita(visitaId, {
               odoo_move_id: odooResult.moveId,
               odoo_move_name: odooResult.name,
               odoo_payment_state: odooResult.payment_state,
@@ -768,7 +791,7 @@ app.put('/api/asignaciones/:id', requireAuth, async (req, res) => {
         odooError = e?.message || String(e);
         console.error('[Odoo] Error emitiendo documento desde asignación', req.params.id, odooError);
         if (visitaId) {
-          db.actualizarVisita(visitaId, {
+          await db.actualizarVisita(visitaId, {
             odoo_last_sync: new Date().toISOString(),
             odoo_error: odooError
           });
@@ -776,16 +799,16 @@ app.put('/api/asignaciones/:id', requireAuth, async (req, res) => {
 
         // Notificar por correo
         if (visitaId) {
-          const visitaRow = db.db.prepare('SELECT * FROM visitas WHERE id = ?').get(visitaId);
+          const visitaRow = await db.obtenerVisitaPorId(visitaId);
           if (shouldNotifyOdooError(visitaRow)) {
-            const cliente = db.obtenerClientePorId(asignacion.cliente_id);
-            notifyOdooError({ where: 'asignacion', odooError, cliente, visitaId, asignacionId: req.params.id });
+            const cliente = await db.obtenerClientePorId(asignacion.cliente_id);
+            await notifyOdooError({ where: 'asignacion', odooError, cliente, visitaId, asignacionId: req.params.id });
           }
         }
       }
     }
 
-    const actualizada = db.db.prepare('SELECT * FROM asignaciones_semanales WHERE id = ?').get(req.params.id);
+    const actualizada = await db.obtenerAsignacionPorId(req.params.id);
     res.json({ success: true, notas: actualizada?.notas, visita_id: visitaId, odoo: odooResult, odoo_error: odooError });
   } catch (error) {
     console.error('[API] Error actualizando asignación:', error);
@@ -794,16 +817,16 @@ app.put('/api/asignaciones/:id', requireAuth, async (req, res) => {
 });
 
 // Visitas
-app.get('/api/clientes/:id(\\d+)/visitas', requireAuth, (req, res) => {
+app.get('/api/clientes/:id(\\d+)/visitas', requireAuth, async (req, res) => {
   try {
     // Verificar que el cliente pertenece al responsable si es responsable
     if (req.responsableId) {
-      const cliente = db.obtenerClientePorId(req.params.id);
+      const cliente = await db.obtenerClientePorId(req.params.id);
       if (!cliente || cliente.responsable_id !== req.responsableId) {
         return res.status(403).json({ error: 'No tienes permisos para ver visitas de este cliente' });
       }
     }
-    const visitas = db.obtenerVisitasCliente(req.params.id, 20);
+    const visitas = await db.obtenerVisitasCliente(req.params.id, 20);
     res.json(visitas);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -822,24 +845,24 @@ app.post('/api/visitas', requireAuth, async (req, res) => {
     
     // Verificar que el cliente pertenece al responsable si es responsable
     if (req.responsableId) {
-      const cliente = db.obtenerClientePorId(cliente_id);
+      const cliente = await db.obtenerClientePorId(cliente_id);
       if (!cliente || cliente.responsable_id !== req.responsableId) {
         return res.status(403).json({ error: 'No tienes permisos para registrar visitas de este cliente' });
       }
     }
     
-    const id = db.registrarVisita(cliente_id, fecha_visita, responsableIdFinal, precio, realizada !== false);
+    const id = await db.registrarVisita(cliente_id, fecha_visita, responsableIdFinal, precio, realizada !== false);
 
     // Emitir documento en Odoo al registrar visita (solo admin, por ahora)
     let odooResult = null;
     let odooError = null;
     if (req.isAdmin) {
-      const cliente = db.obtenerClientePorId(cliente_id);
+      const cliente = await db.obtenerClientePorId(cliente_id);
       if (cliente) {
         try {
           // Sync partner
           const { partnerId } = await odoo.upsertPartnerFromCliente(cliente);
-          db.actualizarCliente(cliente_id, {
+          await db.actualizarCliente(cliente_id, {
             odoo_partner_id: partnerId,
             odoo_last_sync: new Date().toISOString()
           });
@@ -852,7 +875,7 @@ app.post('/api/visitas', requireAuth, async (req, res) => {
           });
 
           // Guardar referencia en la visita
-          db.actualizarVisita(id, {
+          await db.actualizarVisita(id, {
             odoo_move_id: odooResult.moveId,
             odoo_move_name: odooResult.name,
             odoo_payment_state: odooResult.payment_state,
@@ -862,15 +885,15 @@ app.post('/api/visitas', requireAuth, async (req, res) => {
         } catch (e) {
           odooError = e?.message || String(e);
           console.error('[Odoo] Error emitiendo documento para visita', id, odooError);
-          db.actualizarVisita(id, {
+          await db.actualizarVisita(id, {
             odoo_last_sync: new Date().toISOString(),
             odoo_error: odooError
           });
 
-          const visitaRow = db.db.prepare('SELECT * FROM visitas WHERE id = ?').get(id);
+          const visitaRow = await db.db.prepare('SELECT * FROM visitas WHERE id = ?').get(id);
           if (shouldNotifyOdooError(visitaRow)) {
-            const cliente = db.obtenerClientePorId(cliente_id);
-            notifyOdooError({ where: 'visita', odooError, cliente, visitaId: id, asignacionId: null });
+            const cliente = await db.obtenerClientePorId(cliente_id);
+            await notifyOdooError({ where: 'visita', odooError, cliente, visitaId: id, asignacionId: null });
           }
         }
       }
@@ -885,9 +908,9 @@ app.post('/api/visitas', requireAuth, async (req, res) => {
 });
 
 // Estadísticas
-app.get('/api/estadisticas', requireAuth, (req, res) => {
+app.get('/api/estadisticas', requireAuth, async (req, res) => {
   try {
-    const stats = db.obtenerEstadisticas(req.responsableId);
+    const stats = await db.obtenerEstadisticas(req.responsableId);
     res.json(stats);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -895,13 +918,13 @@ app.get('/api/estadisticas', requireAuth, (req, res) => {
 });
 
 // Progreso por responsable (solo admin)
-app.get('/api/progreso/:semana', requireAuth, (req, res) => {
+app.get('/api/progreso/:semana', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden ver el progreso' });
     }
     
-    const progreso = db.obtenerProgresoPorResponsable(req.params.semana);
+    const progreso = await db.obtenerProgresoPorResponsable(req.params.semana);
     res.json(progreso);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -909,13 +932,13 @@ app.get('/api/progreso/:semana', requireAuth, (req, res) => {
 });
 
 // Notas de asignaciones (solo admin)
-app.get('/api/notas/:semana', requireAuth, (req, res) => {
+app.get('/api/notas/:semana', requireAuth, async (req, res) => {
   try {
     if (!req.isAdmin) {
       return res.status(403).json({ error: 'Solo administradores pueden ver las notas' });
     }
     
-    const notas = db.obtenerAsignacionesConNotas(req.params.semana);
+    const notas = await db.obtenerAsignacionesConNotas(req.params.semana);
     res.json(notas);
   } catch (error) {
     res.status(500).json({ error: error.message });
