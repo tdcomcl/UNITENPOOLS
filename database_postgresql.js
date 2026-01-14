@@ -262,25 +262,51 @@ class PiscinasDB {
   async asignarClientesSemana(semanaInicio) {
     const clientes = await this.obtenerClientes(true);
     let asignados = 0;
+    let actualizados = 0;
+    let preservados = 0;
     
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       
       for (const cliente of clientes) {
-        await client.query(`
-          INSERT INTO asignaciones_semanales
-          (semana_inicio, cliente_id, responsable_id, dia_atencion, precio)
-          VALUES ($1, $2, $3, $4, $5)
-          ON CONFLICT (semana_inicio, cliente_id) 
-          DO UPDATE SET responsable_id = EXCLUDED.responsable_id, 
-                        dia_atencion = EXCLUDED.dia_atencion, 
-                        precio = EXCLUDED.precio
-        `, [semanaInicio, cliente.id, cliente.responsable_id, cliente.dia_atencion, cliente.precio_por_visita]);
-        asignados++;
+        // Verificar si ya existe la asignación
+        const checkResult = await client.query(`
+          SELECT id, visita_id, realizada FROM asignaciones_semanales
+          WHERE semana_inicio = $1 AND cliente_id = $2
+        `, [semanaInicio, cliente.id]);
+        
+        if (checkResult.rows.length > 0) {
+          const existente = checkResult.rows[0];
+          
+          // Si ya existe y tiene visita_id o está realizada, preservarla
+          if (existente.visita_id || existente.realizada) {
+            preservados++;
+            continue; // No tocar esta asignación
+          }
+          
+          // Si existe pero no tiene visita, actualizar solo campos básicos
+          await client.query(`
+            UPDATE asignaciones_semanales
+            SET responsable_id = $1,
+                dia_atencion = $2,
+                precio = $3
+            WHERE semana_inicio = $4 AND cliente_id = $5 AND (visita_id IS NULL OR realizada = 0)
+          `, [cliente.responsable_id, cliente.dia_atencion, cliente.precio_por_visita, semanaInicio, cliente.id]);
+          actualizados++;
+        } else {
+          // No existe, crear nueva
+          await client.query(`
+            INSERT INTO asignaciones_semanales
+            (semana_inicio, cliente_id, responsable_id, dia_atencion, precio)
+            VALUES ($1, $2, $3, $4, $5)
+          `, [semanaInicio, cliente.id, cliente.responsable_id, cliente.dia_atencion, cliente.precio_por_visita]);
+          asignados++;
+        }
       }
       
       await client.query('COMMIT');
+      console.log(`[DB] Asignaciones: ${asignados} nuevas, ${actualizados} actualizadas, ${preservados} preservadas (con visita)`);
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -288,7 +314,7 @@ class PiscinasDB {
       client.release();
     }
     
-    return asignados;
+    return asignados + actualizados;
   }
 
   async obtenerAsignacionPorId(id) {
@@ -413,6 +439,59 @@ class PiscinasDB {
       LIMIT $2
     `, [cliente_id, limit]);
     return result.rows.map(r => this.rowToObject(r));
+  }
+
+  // Obtener visitas sin pagar (para reportes)
+  async obtenerVisitasSinPagar(clienteId = null, responsableId = null) {
+    let whereClause = `WHERE v.realizada = 1 AND (
+      v.odoo_payment_state IS NULL 
+      OR v.odoo_payment_state = '' 
+      OR v.odoo_payment_state = 'not_paid' 
+      OR v.odoo_payment_state = 'partial'
+      OR (v.odoo_payment_state IS NOT NULL AND v.odoo_payment_state NOT IN ('paid', 'in_payment'))
+    )`;
+    const params = [];
+    let paramIndex = 1;
+    
+    if (clienteId) {
+      whereClause += ` AND v.cliente_id = $${paramIndex++}`;
+      params.push(clienteId);
+    }
+    
+    if (responsableId) {
+      whereClause += ` AND v.responsable_id = $${paramIndex++}`;
+      params.push(responsableId);
+    }
+    
+    try {
+      const result = await this.query(`
+        SELECT 
+          v.id,
+          v.cliente_id,
+          v.fecha_visita,
+          v.precio,
+          v.odoo_move_name,
+          v.odoo_payment_state,
+          v.odoo_error,
+          c.nombre as cliente_nombre,
+          c.rut as cliente_rut,
+          c.direccion as cliente_direccion,
+          c.comuna as cliente_comuna,
+          c.celular as cliente_celular,
+          c.email as cliente_email,
+          c.documento_tipo,
+          r.nombre as responsable_nombre
+        FROM visitas v
+        LEFT JOIN clientes c ON v.cliente_id = c.id
+        LEFT JOIN responsables r ON v.responsable_id = r.id
+        ${whereClause}
+        ORDER BY v.fecha_visita DESC, c.nombre
+      `, params);
+      return result.rows.map(r => this.rowToObject(r));
+    } catch (error) {
+      console.error('[DB] Error obteniendo visitas sin pagar:', error);
+      throw error;
+    }
   }
 
   // Estadísticas

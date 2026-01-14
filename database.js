@@ -384,28 +384,69 @@ if (dbType === 'postgresql') {
   asignarClientesSemana(semanaInicio) {
     const clientes = this.obtenerClientes(true);
     let asignados = 0;
+    let actualizados = 0;
+    let preservados = 0;
     
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO asignaciones_semanales
+    const insertStmt = this.db.prepare(`
+      INSERT INTO asignaciones_semanales
       (semana_inicio, cliente_id, responsable_id, dia_atencion, precio)
       VALUES (?, ?, ?, ?, ?)
     `);
     
+    const updateStmt = this.db.prepare(`
+      UPDATE asignaciones_semanales
+      SET responsable_id = ?,
+          dia_atencion = ?,
+          precio = ?
+      WHERE semana_inicio = ? AND cliente_id = ? AND (visita_id IS NULL OR realizada = 0)
+    `);
+    
+    const checkStmt = this.db.prepare(`
+      SELECT id, visita_id, realizada FROM asignaciones_semanales
+      WHERE semana_inicio = ? AND cliente_id = ?
+    `);
+    
     const insertMany = this.db.transaction((clientes) => {
       for (const cliente of clientes) {
-        stmt.run(
-          semanaInicio,
-          cliente.id,
-          cliente.responsable_id,
-          cliente.dia_atencion,
-          cliente.precio_por_visita
-        );
-        asignados++;
+        const existente = checkStmt.get(semanaInicio, cliente.id);
+        
+        if (existente) {
+          // Si ya existe y tiene visita_id o está realizada, preservarla
+          if (existente.visita_id || existente.realizada) {
+            preservados++;
+            continue; // No tocar esta asignación
+          }
+          
+          // Si existe pero no tiene visita, actualizar solo campos básicos
+          updateStmt.run(
+            cliente.responsable_id,
+            cliente.dia_atencion,
+            cliente.precio_por_visita,
+            semanaInicio,
+            cliente.id
+          );
+          actualizados++;
+        } else {
+          // No existe, crear nueva
+          insertStmt.run(
+            semanaInicio,
+            cliente.id,
+            cliente.responsable_id,
+            cliente.dia_atencion,
+            cliente.precio_por_visita
+          );
+          asignados++;
+        }
       }
     });
     
     insertMany(clientes);
-    return asignados;
+    console.log(`[DB] Asignaciones: ${asignados} nuevas, ${actualizados} actualizadas, ${preservados} preservadas (con visita)`);
+    return asignados + actualizados;
+  }
+
+  obtenerAsignacionPorId(id) {
+    return this.db.prepare('SELECT * FROM asignaciones_semanales WHERE id = ?').get(id);
   }
 
   actualizarAsignacion(id, updates) {
@@ -467,6 +508,10 @@ if (dbType === 'postgresql') {
     this.db.prepare(query).run(...values);
   }
 
+  obtenerVisitaPorId(id) {
+    return this.db.prepare('SELECT * FROM visitas WHERE id = ?').get(id);
+  }
+
   obtenerVisitasCliente(cliente_id, limit = 10) {
     return this.db.prepare(`
       SELECT v.*, c.nombre as cliente_nombre, r.nombre as responsable_nombre
@@ -477,6 +522,57 @@ if (dbType === 'postgresql') {
       ORDER BY v.fecha_visita DESC
       LIMIT ?
     `).all(cliente_id, limit);
+  }
+
+  // Obtener visitas sin pagar (para reportes)
+  obtenerVisitasSinPagar(clienteId = null, responsableId = null) {
+    let whereClause = `WHERE v.realizada = 1 AND (
+      v.odoo_payment_state IS NULL 
+      OR v.odoo_payment_state = '' 
+      OR v.odoo_payment_state = 'not_paid' 
+      OR v.odoo_payment_state = 'partial'
+      OR (v.odoo_payment_state IS NOT NULL AND v.odoo_payment_state NOT IN ('paid', 'in_payment'))
+    )`;
+    const params = [];
+    
+    if (clienteId) {
+      whereClause += ' AND v.cliente_id = ?';
+      params.push(clienteId);
+    }
+    
+    if (responsableId) {
+      whereClause += ' AND v.responsable_id = ?';
+      params.push(responsableId);
+    }
+    
+    try {
+      return this.db.prepare(`
+        SELECT 
+          v.id,
+          v.cliente_id,
+          v.fecha_visita,
+          v.precio,
+          v.odoo_move_name,
+          v.odoo_payment_state,
+          v.odoo_error,
+          c.nombre as cliente_nombre,
+          c.rut as cliente_rut,
+          c.direccion as cliente_direccion,
+          c.comuna as cliente_comuna,
+          c.celular as cliente_celular,
+          c.email as cliente_email,
+          c.documento_tipo,
+          r.nombre as responsable_nombre
+        FROM visitas v
+        LEFT JOIN clientes c ON v.cliente_id = c.id
+        LEFT JOIN responsables r ON v.responsable_id = r.id
+        ${whereClause}
+        ORDER BY v.fecha_visita DESC, c.nombre
+      `).all(...params);
+    } catch (error) {
+      console.error('[DB] Error obteniendo visitas sin pagar:', error);
+      throw error;
+    }
   }
 
   // Estadísticas

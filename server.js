@@ -708,9 +708,95 @@ app.post('/api/asignaciones/asignar-semana-actual', requireAuth, async (req, res
       return res.status(403).json({ error: 'Solo administradores pueden asignar semanas' });
     }
     const semanaActual = db.obtenerSemanaActual();
-    const asignados = await db.asignarClientesSemana(semanaActual);
+    
+    // Manejar tanto funciones síncronas (SQLite) como asíncronas (PostgreSQL)
+    let asignados;
+    if (typeof db.asignarClientesSemana === 'function') {
+      const result = db.asignarClientesSemana(semanaActual);
+      asignados = result instanceof Promise ? await result : result;
+    } else {
+      throw new Error('Función asignarClientesSemana no encontrada');
+    }
+    
     res.json({ semana: semanaActual, asignados, success: true });
   } catch (error) {
+    console.error('[API] Error asignando semana:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint para verificar y corregir asignaciones
+app.get('/api/asignaciones/verificar', requireAuth, async (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden verificar asignaciones' });
+    }
+    
+    const semana = req.query.semana || db.obtenerSemanaActual();
+    const verificar = require('./scripts/verificar-asignaciones');
+    const resultado = await verificar.verificarAsignaciones(semana);
+    res.json(resultado);
+  } catch (error) {
+    console.error('[API] Error verificando asignaciones:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/asignaciones/limpiar-duplicados', requireAuth, async (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden limpiar duplicados' });
+    }
+    
+    const semana = req.body.semana || db.obtenerSemanaActual();
+    const mantenerId = req.body.mantener_id || null;
+    const verificar = require('./scripts/verificar-asignaciones');
+    const eliminados = await verificar.limpiarDuplicados(semana, mantenerId);
+    res.json({ success: true, eliminados });
+  } catch (error) {
+    console.error('[API] Error limpiando duplicados:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/asignaciones/restaurar-faltantes', requireAuth, async (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden restaurar asignaciones' });
+    }
+    
+    const semana = req.body.semana || db.obtenerSemanaActual();
+    const verificar = require('./scripts/verificar-asignaciones');
+    const restaurados = await verificar.restaurarAsignacionesFaltantes(semana);
+    res.json({ success: true, restaurados });
+  } catch (error) {
+    console.error('[API] Error restaurando asignaciones:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/asignaciones/restaurar-visitas', requireAuth, async (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden restaurar relaciones' });
+    }
+    
+    const semana = req.body.semana || db.obtenerSemanaActual();
+    const fechaCreacion = req.body.fecha_creacion || null;
+    
+    if (fechaCreacion) {
+      // Restaurar asignaciones específicas por fecha de creación
+      const restaurarEspecifico = require('./scripts/restaurar-asignaciones-especificas');
+      const resultado = await restaurarEspecifico.restaurarAsignacionesPorFechaCreacion(fechaCreacion, semana);
+      res.json({ success: true, ...resultado });
+    } else {
+      // Restaurar todas las asignaciones de la semana
+      const restaurar = require('./scripts/restaurar-visitas-asignaciones');
+      const resultado = await restaurar.restaurarVisitasAsignaciones(semana);
+      res.json({ success: true, ...resultado });
+    }
+  } catch (error) {
+    console.error('[API] Error restaurando relaciones:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -912,6 +998,93 @@ app.get('/api/estadisticas', requireAuth, async (req, res) => {
   try {
     const stats = await db.obtenerEstadisticas(req.responsableId);
     res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reportes - Visitas sin pagar
+app.get('/api/reportes/visitas-sin-pagar', requireAuth, async (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden ver reportes' });
+    }
+    
+    const clienteId = req.query.cliente_id ? parseInt(req.query.cliente_id) : null;
+    const responsableId = req.query.responsable_id ? parseInt(req.query.responsable_id) : null;
+    
+    // Manejar tanto funciones síncronas (SQLite) como asíncronas (PostgreSQL)
+    let visitas;
+    if (typeof db.obtenerVisitasSinPagar === 'function') {
+      const result = db.obtenerVisitasSinPagar(clienteId, responsableId);
+      visitas = result instanceof Promise ? await result : result;
+    } else {
+      throw new Error('Función obtenerVisitasSinPagar no encontrada');
+    }
+    
+    res.json(visitas || []);
+  } catch (error) {
+    console.error('[API] Error obteniendo visitas sin pagar:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/reportes/visitas-sin-pagar/export', requireAuth, async (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden exportar reportes' });
+    }
+    
+    const clienteId = req.query.cliente_id ? parseInt(req.query.cliente_id) : null;
+    const responsableId = req.query.responsable_id ? parseInt(req.query.responsable_id) : null;
+    
+    // Manejar tanto funciones síncronas (SQLite) como asíncronas (PostgreSQL)
+    let visitas;
+    if (typeof db.obtenerVisitasSinPagar === 'function') {
+      const result = db.obtenerVisitasSinPagar(clienteId, responsableId);
+      visitas = result instanceof Promise ? await result : result;
+    } else {
+      throw new Error('Función obtenerVisitasSinPagar no encontrada');
+    }
+    
+    // Preparar datos para Excel
+    const rows = visitas.map(v => ({
+      'ID Visita': v.id,
+      'Fecha Visita': v.fecha_visita || '',
+      'Cliente': v.cliente_nombre || '',
+      'RUT Cliente': v.cliente_rut || '',
+      'Dirección': v.cliente_direccion || '',
+      'Comuna': v.cliente_comuna || '',
+      'Celular': v.cliente_celular || '',
+      'Email': v.cliente_email || '',
+      'Responsable': v.responsable_nombre || 'Sin asignar',
+      'Precio': v.precio || 0,
+      'Documento Odoo': v.odoo_move_name || 'No emitido',
+      'Estado Pago': v.odoo_payment_state || 'Pendiente',
+      'Error Odoo': v.odoo_error || ''
+    }));
+    
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Visitas Sin Pagar');
+    
+    // Agregar hoja de resumen
+    const total = visitas.length;
+    const totalMonto = visitas.reduce((sum, v) => sum + (parseFloat(v.precio) || 0), 0);
+    const resumen = [
+      { 'Concepto': 'Total Visitas Sin Pagar', 'Valor': total },
+      { 'Concepto': 'Monto Total Pendiente', 'Valor': totalMonto }
+    ];
+    const wsResumen = XLSX.utils.json_to_sheet(resumen);
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+    
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const today = new Date().toISOString().slice(0, 10);
+    const filename = `visitas-sin-pagar-${today}.xlsx`;
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buf);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

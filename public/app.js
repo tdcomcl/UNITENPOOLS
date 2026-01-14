@@ -136,9 +136,21 @@ const app = {
         if (btnNotas) {
             btnNotas.style.display = isAdmin ? 'inline-block' : 'none';
         }
+        const btnReportes = document.getElementById('nav-reportes');
+        if (btnReportes) {
+            btnReportes.style.display = isAdmin ? 'inline-block' : 'none';
+        }
         if (btnResponsables) {
             btnResponsables.style.display = isAdmin ? 'inline-block' : 'none';
         }
+        
+        // Mostrar botones de verificación y restauración solo para admin
+        const btnVerificar = document.getElementById('btn-verificar-asignaciones');
+        const btnRestaurar = document.getElementById('btn-restaurar-asignaciones');
+        const btnRestaurarVisitas = document.getElementById('btn-restaurar-visitas');
+        if (btnVerificar) btnVerificar.style.display = isAdmin ? 'inline-block' : 'none';
+        if (btnRestaurar) btnRestaurar.style.display = isAdmin ? 'inline-block' : 'none';
+        if (btnRestaurarVisitas) btnRestaurarVisitas.style.display = isAdmin ? 'inline-block' : 'none';
         
         // Ocultar/mostrar elementos según rol
         if (!isAdmin) {
@@ -239,6 +251,8 @@ const app = {
             this.cargarProgreso();
         } else if (page === 'notas') {
             this.cargarNotas();
+        } else if (page === 'reportes') {
+            this.cargarReportes();
         } else if (page === 'responsables') {
             this.cargarResponsables();
         }
@@ -1497,6 +1511,431 @@ const app = {
         } catch (error) {
             console.error('Error registrando visita:', error);
             alert(`Error al registrar la visita: ${error?.message || error}`);
+        }
+    },
+
+    // Reportes
+    async cargarReportes() {
+        try {
+            const tbody = document.getElementById('reportes-table-body');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="10" class="loading">Cargando reportes...</td></tr>';
+            }
+            
+            const clienteId = document.getElementById('reporte-cliente-filter')?.value || '';
+            const responsableId = document.getElementById('reporte-responsable-filter')?.value || '';
+            
+            let url = `${API_URL}/api/reportes/visitas-sin-pagar?`;
+            if (clienteId) url += `cliente_id=${clienteId}&`;
+            if (responsableId) url += `responsable_id=${responsableId}&`;
+            
+            const res = await fetch(url, {
+                credentials: 'include'
+            });
+            
+            if (res.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            if (res.status === 403) {
+                if (tbody) {
+                    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No tienes permisos para ver reportes</td></tr>';
+                }
+                return;
+            }
+            
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }));
+                throw new Error(errorData.error || `Error HTTP ${res.status}`);
+            }
+            
+            const visitas = await res.json();
+            this.renderReportes(visitas);
+            
+            // Cargar filtros si no están cargados
+            if (this.clientes.length === 0 || this.responsables.length === 0) {
+                await Promise.all([this.cargarClientes(), this.cargarResponsables()]);
+            }
+            this.cargarFiltrosReportes();
+        } catch (error) {
+            console.error('Error cargando reportes:', error);
+            const tbody = document.getElementById('reportes-table-body');
+            if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="10" class="error">Error al cargar reportes: ${error.message || error}</td></tr>`;
+            }
+        }
+    },
+
+    cargarFiltrosReportes() {
+        // Cargar clientes en el filtro
+        const clienteFilter = document.getElementById('reporte-cliente-filter');
+        if (clienteFilter && this.clientes.length > 0) {
+            clienteFilter.innerHTML = '<option value="">Todos los clientes</option>';
+            this.clientes.forEach(cliente => {
+                const option = document.createElement('option');
+                option.value = cliente.id;
+                option.textContent = cliente.nombre;
+                clienteFilter.appendChild(option);
+            });
+        }
+        
+        // Cargar responsables en el filtro
+        const responsableFilter = document.getElementById('reporte-responsable-filter');
+        if (responsableFilter && this.responsables.length > 0) {
+            responsableFilter.innerHTML = '<option value="">Todos los responsables</option>';
+            this.responsables.forEach(resp => {
+                const option = document.createElement('option');
+                option.value = resp.id;
+                option.textContent = resp.nombre;
+                responsableFilter.appendChild(option);
+            });
+        }
+    },
+
+    renderReportes(visitas) {
+        const tbody = document.getElementById('reportes-table-body');
+        const resumenDiv = document.getElementById('reportes-resumen');
+        const totalVisitas = document.getElementById('reporte-total-visitas');
+        const totalMonto = document.getElementById('reporte-total-monto');
+        const btnCopiar = document.getElementById('btn-copiar-whatsapp');
+        
+        if (!tbody) return;
+        
+        if (visitas.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No hay visitas sin pagar</td></tr>';
+            resumenDiv.style.display = 'none';
+            if (btnCopiar) btnCopiar.style.display = 'none';
+            return;
+        }
+        
+        // Guardar visitas para poder copiarlas después
+        this.visitasSinPagar = visitas;
+        
+        // Calcular totales
+        const total = visitas.length;
+        const montoTotal = visitas.reduce((sum, v) => sum + (parseFloat(v.precio) || 0), 0);
+        
+        if (totalVisitas) totalVisitas.textContent = total;
+        if (totalMonto) totalMonto.textContent = `$${formatearPrecio(montoTotal)}`;
+        if (resumenDiv) resumenDiv.style.display = 'block';
+        if (btnCopiar) btnCopiar.style.display = 'inline-block';
+        
+        // Formatear estado de pago
+        const formatearEstadoPago = (estado) => {
+            if (!estado || estado === '') return '<span class="tag tag-warning">Pendiente</span>';
+            if (estado === 'not_paid') return '<span class="tag tag-danger">No Pagado</span>';
+            if (estado === 'partial') return '<span class="tag tag-warning">Parcial</span>';
+            if (estado === 'paid' || estado === 'in_payment') return '<span class="tag tag-success">Pagado</span>';
+            return `<span class="tag tag-info">${estado}</span>`;
+        };
+        
+        // Formatear fecha para mostrar
+        const formatearFecha = (fecha) => {
+            if (!fecha) return '-';
+            try {
+                const d = new Date(fecha);
+                return d.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            } catch {
+                return fecha;
+            }
+        };
+        
+        tbody.innerHTML = visitas.map(v => `
+            <tr>
+                <td>${v.id}</td>
+                <td>${formatearFecha(v.fecha_visita)}</td>
+                <td><strong>${v.cliente_nombre || '-'}</strong></td>
+                <td>${v.cliente_rut || '-'}</td>
+                <td>${v.cliente_direccion || '-'}</td>
+                <td>${v.cliente_comuna || '-'}</td>
+                <td>${v.responsable_nombre || 'Sin asignar'}</td>
+                <td>$${formatearPrecio(v.precio)}</td>
+                <td>${v.odoo_move_name || '<span style="color: #999;">No emitido</span>'}</td>
+                <td>${formatearEstadoPago(v.odoo_payment_state)}</td>
+            </tr>
+        `).join('');
+    },
+
+    copiarParaWhatsApp() {
+        if (!this.visitasSinPagar || this.visitasSinPagar.length === 0) {
+            this.showToast('No hay visitas para copiar', 'warning', 2000);
+            return;
+        }
+        
+        // Agrupar por cliente
+        const porCliente = {};
+        this.visitasSinPagar.forEach(v => {
+            const clienteId = v.cliente_id;
+            if (!porCliente[clienteId]) {
+                porCliente[clienteId] = {
+                    cliente_nombre: v.cliente_nombre || 'Sin nombre',
+                    visitas: []
+                };
+            }
+            porCliente[clienteId].visitas.push(v);
+        });
+        
+        // Formatear fecha para WhatsApp
+        const formatearFechaWhatsApp = (fecha) => {
+            if (!fecha) return 'Fecha no disponible';
+            try {
+                const d = new Date(fecha);
+                return d.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            } catch {
+                return fecha;
+            }
+        };
+        
+        // Construir texto para WhatsApp
+        let texto = '📋 *VISITAS SIN PAGAR*\n\n';
+        
+        let montoTotal = 0;
+        Object.values(porCliente).forEach(cliente => {
+            texto += `*${cliente.cliente_nombre}*\n`;
+            let montoCliente = 0;
+            
+            cliente.visitas.forEach(v => {
+                const fecha = formatearFechaWhatsApp(v.fecha_visita);
+                const precio = parseFloat(v.precio) || 0;
+                montoCliente += precio;
+                texto += `  • ${fecha}: $${formatearPrecio(precio)}\n`;
+            });
+            
+            montoTotal += montoCliente;
+            texto += `  *Total: $${formatearPrecio(montoCliente)}*\n\n`;
+        });
+        
+        texto += `\n*MONTO TOTAL PENDIENTE: $${formatearPrecio(montoTotal)}*\n`;
+        texto += `\nTotal de visitas: ${this.visitasSinPagar.length}`;
+        
+        // Copiar al portapapeles
+        navigator.clipboard.writeText(texto).then(() => {
+            this.showToast('✅ Texto copiado al portapapeles. Listo para pegar en WhatsApp', 'success', 4000);
+        }).catch(err => {
+            console.error('Error copiando:', err);
+            // Fallback: mostrar en un modal
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 600px;">
+                    <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
+                    <h2>Texto para WhatsApp</h2>
+                    <textarea readonly style="width: 100%; height: 400px; padding: 1rem; font-family: monospace; border: 1px solid #ddd; border-radius: 4px;">${texto}</textarea>
+                    <div class="form-actions" style="margin-top: 1rem;">
+                        <button class="btn btn-primary" onclick="navigator.clipboard.writeText(this.previousElementSibling.value).then(() => alert('Copiado!')).catch(() => {})">Copiar</button>
+                        <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">Cerrar</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        });
+    },
+
+    async descargarReporteExcel() {
+        try {
+            this.showToast('Preparando Excel de reportes…', 'info', 2000);
+            
+            const clienteId = document.getElementById('reporte-cliente-filter')?.value || '';
+            const responsableId = document.getElementById('reporte-responsable-filter')?.value || '';
+            
+            let url = `${API_URL}/api/reportes/visitas-sin-pagar/export?`;
+            if (clienteId) url += `cliente_id=${clienteId}&`;
+            if (responsableId) url += `responsable_id=${responsableId}&`;
+            
+            const res = await fetch(url, {
+                credentials: 'include'
+            });
+            
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || `Error HTTP ${res.status}`);
+            }
+            
+            const blob = await res.blob();
+            const cd = res.headers.get('content-disposition') || '';
+            const m = /filename="([^"]+)"/i.exec(cd);
+            const filename = m?.[1] || 'visitas-sin-pagar.xlsx';
+            
+            const urlBlob = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = urlBlob;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(urlBlob);
+            
+            this.showToast('✅ Excel descargado correctamente', 'success', 3000);
+        } catch (e) {
+            console.error(e);
+            this.showToast(`Error al descargar Excel: ${e?.message || e}`, 'error', 4500);
+        }
+    },
+
+    // Verificación y restauración de asignaciones
+    async verificarAsignaciones() {
+        try {
+            const semana = document.getElementById('semana-selector')?.value || '';
+            let url = `${API_URL}/api/asignaciones/verificar`;
+            if (semana) url += `?semana=${semana}`;
+            
+            this.showToast('Verificando asignaciones...', 'info', 2000);
+            
+            const res = await fetch(url, {
+                credentials: 'include'
+            });
+            
+            if (res.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            if (res.status === 403) {
+                this.showToast('Solo administradores pueden verificar asignaciones', 'error', 3000);
+                return;
+            }
+            
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }));
+                throw new Error(errorData.error || `Error HTTP ${res.status}`);
+            }
+            
+            const resultado = await res.json();
+            
+            // Mostrar resultado
+            const div = document.getElementById('asignaciones-verificacion');
+            const text = document.getElementById('asignaciones-verificacion-text');
+            
+            if (div && text) {
+                let mensaje = `📊 Verificación de Asignaciones - Semana: ${resultado.semanaInicio}\n\n`;
+                mensaje += `Total de asignaciones: ${resultado.totalAsignaciones}\n`;
+                
+                if (resultado.duplicados && resultado.duplicados.length > 0) {
+                    mensaje += `\n⚠️ Duplicados encontrados: ${resultado.duplicados.length}\n`;
+                    resultado.duplicados.forEach(dup => {
+                        mensaje += `  • ${dup.cliente_nombre}: ${dup.asignaciones.length} asignaciones\n`;
+                    });
+                } else {
+                    mensaje += `\n✅ No hay duplicados\n`;
+                }
+                
+                if (resultado.clientesSinAsignacion && resultado.clientesSinAsignacion.length > 0) {
+                    mensaje += `\n⚠️ Clientes sin asignación: ${resultado.clientesSinAsignacion.length}\n`;
+                    resultado.clientesSinAsignacion.forEach(cliente => {
+                        mensaje += `  • ${cliente.nombre}\n`;
+                    });
+                } else {
+                    mensaje += `\n✅ Todos los clientes tienen asignación\n`;
+                }
+                
+                text.textContent = mensaje;
+                div.style.display = 'block';
+                
+                this.showToast('Verificación completada', 'success', 3000);
+            }
+        } catch (error) {
+            console.error('Error verificando asignaciones:', error);
+            this.showToast(`Error: ${error.message || error}`, 'error', 5000);
+        }
+    },
+
+    async restaurarAsignacionesFaltantes() {
+        if (!confirm('¿Restaurar asignaciones faltantes para la semana seleccionada?\n\nEsto creará asignaciones para clientes activos que no tienen asignación.')) {
+            return;
+        }
+        
+        try {
+            const semana = document.getElementById('semana-selector')?.value || '';
+            
+            this.showToast('Restaurando asignaciones...', 'info', 2000);
+            
+            const res = await fetch(`${API_URL}/api/asignaciones/restaurar-faltantes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ semana })
+            });
+            
+            if (res.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            if (res.status === 403) {
+                this.showToast('Solo administradores pueden restaurar asignaciones', 'error', 3000);
+                return;
+            }
+            
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }));
+                throw new Error(errorData.error || `Error HTTP ${res.status}`);
+            }
+            
+            const resultado = await res.json();
+            
+            this.showToast(`✅ ${resultado.restaurados} asignación(es) restaurada(s)`, 'success', 4000);
+            
+            // Recargar asignaciones
+            await this.cargarAsignaciones();
+            
+            // Ocultar mensaje de verificación
+            const div = document.getElementById('asignaciones-verificacion');
+            if (div) div.style.display = 'none';
+        } catch (error) {
+            console.error('Error restaurando asignaciones:', error);
+            this.showToast(`Error: ${error.message || error}`, 'error', 5000);
+        }
+    },
+
+    async restaurarVisitasAsignaciones() {
+        const fechaCreacion = prompt('¿Restaurar asignaciones específicas?\n\nIngresa la fecha de creación (ej: 2026-01-13 21:50:39.945573)\no deja vacío para restaurar todas las asignaciones de la semana:');
+        
+        try {
+            const semana = document.getElementById('semana-selector')?.value || '';
+            
+            this.showToast('Restaurando relaciones...', 'info', 2000);
+            
+            const body = { semana };
+            if (fechaCreacion && fechaCreacion.trim()) {
+                body.fecha_creacion = fechaCreacion.trim();
+            }
+            
+            const res = await fetch(`${API_URL}/api/asignaciones/restaurar-visitas`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(body)
+            });
+            
+            if (res.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            if (res.status === 403) {
+                this.showToast('Solo administradores pueden restaurar relaciones', 'error', 3000);
+                return;
+            }
+            
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }));
+                throw new Error(errorData.error || `Error HTTP ${res.status}`);
+            }
+            
+            const resultado = await res.json();
+            
+            this.showToast(`✅ ${resultado.restauradas} relación(es) restaurada(s)${resultado.sinVisita ? `, ${resultado.sinVisita} sin visita` : ''}`, 'success', 5000);
+            
+            // Recargar asignaciones
+            await this.cargarAsignaciones();
+            
+            // Ocultar mensaje de verificación
+            const div = document.getElementById('asignaciones-verificacion');
+            if (div) div.style.display = 'none';
+        } catch (error) {
+            console.error('Error restaurando relaciones:', error);
+            this.showToast(`Error: ${error.message || error}`, 'error', 5000);
         }
     }
 };
