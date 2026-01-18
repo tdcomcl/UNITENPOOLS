@@ -32,20 +32,20 @@ const app = {
             window.location.href = '/login.html';
             return;
         }
-        
+
         this.setupEventListeners();
         this.mostrarInfoUsuario();
         this.actualizarUI();
-        
+
         const isAdmin = this.currentUser?.rol === 'admin';
-        
+
         if (isAdmin) {
             // Admin ve todas las páginas
             this.cargarResponsables();
             this.cargarClientes();
             this.cargarEstadisticas();
             this.configurarSemanaActual();
-            
+
             // Configurar selector de semana para progreso y notas
             const hoy = new Date();
             const day = hoy.getDay();
@@ -59,7 +59,7 @@ const app = {
             if (notasSelector) {
                 notasSelector.value = monday.toISOString().split('T')[0];
             }
-            
+
             // Mostrar dashboard por defecto
             this.showPage('dashboard');
         } else {
@@ -67,7 +67,7 @@ const app = {
             this.configurarSemanaActual();
             this.showPage('asignaciones');
         }
-        
+
         // Iniciar auto-actualización en tiempo real
         this.iniciarAutoActualizacion();
     },
@@ -115,14 +115,14 @@ const app = {
 
     actualizarUI() {
         const isAdmin = this.currentUser?.rol === 'admin';
-        
+
         // Mostrar/ocultar pestañas según rol
         const btnDashboard = document.querySelector('[data-page="dashboard"]');
         const btnClientes = document.querySelector('[data-page="clientes"]');
         const btnProgreso = document.getElementById('nav-progreso');
         const btnNotas = document.getElementById('nav-notas');
         const btnResponsables = document.querySelector('[data-page="responsables"]');
-        
+
         // Responsables solo ven Asignaciones
         if (btnDashboard) {
             btnDashboard.style.display = isAdmin ? 'inline-block' : 'none';
@@ -143,7 +143,7 @@ const app = {
         if (btnResponsables) {
             btnResponsables.style.display = isAdmin ? 'inline-block' : 'none';
         }
-        
+
         // Mostrar botones de verificación y restauración solo para admin
         const btnVerificar = document.getElementById('btn-verificar-asignaciones');
         const btnRestaurar = document.getElementById('btn-restaurar-asignaciones');
@@ -151,25 +151,25 @@ const app = {
         if (btnVerificar) btnVerificar.style.display = isAdmin ? 'inline-block' : 'none';
         if (btnRestaurar) btnRestaurar.style.display = isAdmin ? 'inline-block' : 'none';
         if (btnRestaurarVisitas) btnRestaurarVisitas.style.display = isAdmin ? 'inline-block' : 'none';
-        
+
         // Ocultar/mostrar elementos según rol
         if (!isAdmin) {
             // Responsables no pueden agregar clientes, responsables, ni asignar semanas
             const btnAgregarCliente = document.querySelector('[onclick*="showModal(\'cliente-modal\')"]');
             const btnAgregarResponsable = document.querySelector('[onclick*="showModal(\'responsable-modal\')"]');
             const btnAsignarSemana = document.querySelectorAll('[onclick*="asignarSemanaActual"]');
-            
+
             if (btnAgregarCliente) btnAgregarCliente.style.display = 'none';
             if (btnAgregarResponsable) btnAgregarResponsable.style.display = 'none';
             btnAsignarSemana.forEach(btn => btn.style.display = 'none');
-            
+
             // Configurar vista de clientes limitada (aunque no deberían verla)
             this.configurarVistaClientesLimitada();
         } else {
             // Configurar vista completa para admin
             this.configurarVistaClientesCompleta();
         }
-        
+
         // Mostrar información del responsable
         if (this.currentUser?.responsable_nombre) {
             const dashboard = document.getElementById('dashboard-page');
@@ -184,7 +184,7 @@ const app = {
                 dashboard.insertBefore(info, dashboard.firstChild.nextSibling);
             }
         }
-        
+
     },
 
     setupEventListeners() {
@@ -220,7 +220,7 @@ const app = {
 
     showPage(page) {
         const isAdmin = this.currentUser?.rol === 'admin';
-        
+
         // Restricciones de acceso para responsables
         if (!isAdmin) {
             const paginasPermitidas = ['asignaciones'];
@@ -229,16 +229,16 @@ const app = {
                 page = 'asignaciones';
             }
         }
-        
+
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-        
+
         document.getElementById(`${page}-page`).classList.add('active');
         const navBtn = document.querySelector(`[data-page="${page}"]`);
         if (navBtn) {
             navBtn.classList.add('active');
         }
-        
+
         this.currentPage = page;
 
         if (page === 'dashboard') {
@@ -298,7 +298,7 @@ const app = {
             });
 
             const data = await res.json().catch(() => ({}));
-            
+
             if (!res.ok || !data.valid) {
                 if (errorDiv) {
                     errorDiv.textContent = data.error || 'Contraseña incorrecta';
@@ -311,7 +311,7 @@ const app = {
 
             // Contraseña correcta: guardar contraseña temporalmente para usarla en la importación
             this.excelImportPassword = password;
-            
+
             // Obtener el input
             const input = document.getElementById('clientes-import-file');
             if (!input) {
@@ -319,13 +319,13 @@ const app = {
                 this.showToast('Error: No se encontró el selector de archivos', 'error', 3000);
                 return;
             }
-            
+
             // IMPORTANTE: Hacer click ANTES de cerrar el modal
             // Los navegadores modernos requieren que el click en input file sea parte de la misma cadena de interacción del usuario
             try {
                 input.click();
                 console.log('Selector de archivos abierto');
-                
+
                 // Cerrar modal después de abrir el selector
                 // Usar un pequeño delay para que el selector se abra primero
                 setTimeout(() => {
@@ -446,7 +446,7 @@ const app = {
                 return;
             }
             const stats = await res.json();
-            
+
             document.getElementById('stat-clientes').textContent = stats.totalClientes;
             document.getElementById('stat-responsables').textContent = stats.totalResponsables;
             document.getElementById('stat-asignaciones').textContent = stats.asignacionesSemanaActual;
@@ -465,7 +465,7 @@ const app = {
                 return;
             }
             this.responsables = await res.json();
-            
+
             // Llenar selects de responsables
             const selects = document.querySelectorAll('#cliente-responsable, #visita-responsable');
             selects.forEach(select => {
@@ -493,7 +493,7 @@ const app = {
                     `).join('');
                 }
             }
-            
+
             // Cargar filtros después de cargar responsables
             if (this.clientes.length > 0) {
                 this.cargarFiltros();
@@ -526,7 +526,7 @@ const app = {
     renderClientes(clientes) {
         const tbody = document.getElementById('clientes-table-body');
         if (!tbody) return;
-        
+
         const isAdmin = this.currentUser?.rol === 'admin';
 
         if (clientes.length === 0) {
@@ -599,11 +599,11 @@ const app = {
         // Cargar responsables para el filtro
         const responsableFilter = document.getElementById('responsable-filter');
         const bulkResponsable = document.getElementById('bulk-responsable');
-        
+
         if (responsableFilter) {
             responsableFilter.innerHTML = '<option value="">Todos los responsables</option>';
             responsableFilter.innerHTML += '<option value="sin-asignar">❌ Sin asignar</option>';
-            
+
             if (this.responsables.length > 0) {
                 this.responsables.forEach(resp => {
                     const option = document.createElement('option');
@@ -613,7 +613,7 @@ const app = {
                 });
             }
         }
-        
+
         if (bulkResponsable) {
             bulkResponsable.innerHTML = '<option value="">Seleccionar responsable...</option>';
             if (this.responsables.length > 0) {
@@ -625,7 +625,7 @@ const app = {
                 });
             }
         }
-        
+
         // Cargar comunas únicas para el filtro
         const comunaFilter = document.getElementById('comuna-filter');
         if (comunaFilter && this.clientes.length > 0) {
@@ -647,25 +647,25 @@ const app = {
             this.renderClientes(this.clientes);
             return;
         }
-        
+
         const search = document.getElementById('cliente-search')?.value.toLowerCase() || '';
         const documento = document.getElementById('documento-filter')?.value || '';
         const responsableId = document.getElementById('responsable-filter')?.value || '';
         const comuna = document.getElementById('comuna-filter')?.value || '';
         const dia = document.getElementById('dia-filter')?.value || '';
         const asignado = document.getElementById('asignado-filter')?.value || '';
-        
+
         let filtered = this.clientes;
-        
+
         // Filtro de búsqueda por nombre
         if (search) {
-            filtered = filtered.filter(c => 
+            filtered = filtered.filter(c =>
                 c.nombre.toLowerCase().includes(search) ||
                 (c.direccion && c.direccion.toLowerCase().includes(search)) ||
                 (c.comuna && c.comuna.toLowerCase().includes(search))
             );
         }
-        
+
         // Filtro por responsable
         if (responsableId) {
             if (responsableId === 'sin-asignar') {
@@ -674,12 +674,12 @@ const app = {
                 filtered = filtered.filter(c => c.responsable_id == responsableId);
             }
         }
-        
+
         // Filtro por comuna
         if (comuna) {
             filtered = filtered.filter(c => c.comuna === comuna);
         }
-        
+
         // Filtro por tipo de documento
         if (documento) {
             filtered = filtered.filter(c => (c.documento_tipo || 'invoice') === documento);
@@ -689,14 +689,14 @@ const app = {
         if (dia) {
             filtered = filtered.filter(c => c.dia_atencion === dia);
         }
-        
+
         // Filtro por asignado/sin asignar
         if (asignado === 'asignado') {
             filtered = filtered.filter(c => c.responsable_id);
         } else if (asignado === 'sin-asignar') {
             filtered = filtered.filter(c => !c.responsable_id);
         }
-        
+
         this.renderClientes(filtered);
     },
 
@@ -712,14 +712,14 @@ const app = {
         const count = selected.length;
         const bulkActions = document.getElementById('bulk-actions');
         const selectedCount = document.getElementById('selected-count');
-        
+
         if (count > 0) {
             bulkActions.style.display = 'flex';
             selectedCount.textContent = `${count} seleccionado${count > 1 ? 's' : ''}`;
         } else {
             bulkActions.style.display = 'none';
         }
-        
+
         // Actualizar checkbox "seleccionar todos"
         const selectAll = document.getElementById('select-all');
         const totalCheckboxes = document.querySelectorAll('.cliente-checkbox').length;
@@ -744,7 +744,7 @@ const app = {
         const filtersPanel = document.querySelector('.filters-panel');
         const btnNuevoCliente = document.getElementById('btn-nuevo-cliente');
         const infoResponsable = document.getElementById('clientes-info-responsable');
-        
+
         if (adminHeaderRow) adminHeaderRow.style.display = '';
         if (responsableHeaderRow) responsableHeaderRow.style.display = 'none';
         if (filtersPanel) filtersPanel.style.display = 'block';
@@ -758,7 +758,7 @@ const app = {
         const filtersPanel = document.querySelector('.filters-panel');
         const btnNuevoCliente = document.getElementById('btn-nuevo-cliente');
         const infoResponsable = document.getElementById('clientes-info-responsable');
-        
+
         if (adminHeaderRow) adminHeaderRow.style.display = 'none';
         if (responsableHeaderRow) responsableHeaderRow.style.display = '';
         if (filtersPanel) filtersPanel.style.display = 'none';
@@ -769,24 +769,24 @@ const app = {
     async asignarResponsableMasivo() {
         const selected = Array.from(document.querySelectorAll('.cliente-checkbox:checked')).map(cb => parseInt(cb.value));
         const responsableId = document.getElementById('bulk-responsable').value;
-        
+
         if (selected.length === 0) {
             alert('Por favor selecciona al menos un cliente');
             return;
         }
-        
+
         if (!responsableId) {
             alert('Por favor selecciona un responsable');
             return;
         }
-        
+
         if (!confirm(`¿Asignar ${selected.length} cliente(s) al responsable seleccionado?`)) {
             return;
         }
-        
+
         try {
             // Actualizar cada cliente
-            const promises = selected.map(clienteId => 
+            const promises = selected.map(clienteId =>
                 fetch(`${API_URL}/api/clientes/${clienteId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
@@ -794,11 +794,11 @@ const app = {
                     body: JSON.stringify({ responsable_id: parseInt(responsableId) })
                 })
             );
-            
+
             await Promise.all(promises);
-            
+
             alert(`✓ ${selected.length} cliente(s) asignado(s) correctamente`);
-            
+
             // Recargar clientes y limpiar selección
             await this.cargarClientes();
             this.deseleccionarTodos();
@@ -835,14 +835,14 @@ const app = {
             this.renderAsignaciones(this.asignaciones);
         } catch (error) {
             console.error('Error cargando asignaciones:', error);
-            document.getElementById('asignaciones-container').innerHTML = 
+            document.getElementById('asignaciones-container').innerHTML =
                 '<div class="error">Error al cargar asignaciones</div>';
         }
     },
 
     renderAsignaciones(asignaciones) {
         const container = document.getElementById('asignaciones-container');
-        
+
         if (asignaciones.length === 0) {
             container.innerHTML = '<div class="empty-state"><h3>No hay asignaciones para esta semana</h3></div>';
             return;
@@ -870,8 +870,8 @@ const app = {
         container.innerHTML = `
             <div class="asignaciones-grid">
                 ${diasOrden.map(dia => {
-                    if (!porDia[dia]) return '';
-                    return `
+            if (!porDia[dia]) return '';
+            return `
                         <div class="dia-section">
                             <h3>${dia}</h3>
                             ${porDia[dia].map(asig => `
@@ -888,20 +888,20 @@ const app = {
                                         </div>
                                     </div>
                                     <div class="asignacion-actions">
-                                        ${asig.realizada 
-                                            ? `<button class="btn btn-success btn-sm" onclick="app.marcarAsignacionRealizada(${asig.id}, false)" style="min-width: 120px;">
+                                        ${asig.realizada
+                    ? `<button class="btn btn-success btn-sm" onclick="app.marcarAsignacionRealizada(${asig.id}, false)" style="min-width: 120px;">
                                                 ✓ Realizada
                                                </button>`
-                                            : `<button class="btn btn-primary btn-sm" onclick="app.marcarAsignacionRealizada(${asig.id}, true)" style="min-width: 120px;">
+                    : `<button class="btn btn-primary btn-sm" onclick="app.marcarAsignacionRealizada(${asig.id}, true)" style="min-width: 120px;">
                                                 Marcar Realizada
                                                </button>`
-                                        }
+                }
                                     </div>
                                 </div>
                             `).join('')}
                         </div>
                     `;
-                }).join('')}
+        }).join('')}
                 ${otrosDias.map(dia => `
                     <div class="dia-section">
                         <h3>${dia}</h3>
@@ -957,7 +957,7 @@ const app = {
                 credentials: 'include',
                 body: JSON.stringify({ realizada: realizada ? 1 : 0 })
             });
-            
+
             if (res.status === 401) {
                 window.location.href = '/login.html';
                 return;
@@ -978,10 +978,10 @@ const app = {
                     setTimeout(() => alert(`Odoo falló al emitir:\n${data.odoo_error}\n\n(Quedó pendiente de emisión)`), 100);
                 }
             }
-            
+
             // Actualizar asignaciones
             await this.cargarAsignaciones();
-            
+
             // Si es admin y está viendo progreso, actualizar también
             if (this.currentUser?.rol === 'admin' && this.currentPage === 'progreso') {
                 setTimeout(() => this.cargarProgreso(), 500);
@@ -1031,34 +1031,34 @@ const app = {
             const res = await fetch(`${API_URL}/api/progreso/${semana}`, {
                 credentials: 'include'
             });
-            
+
             if (res.status === 401) {
                 window.location.href = '/login.html';
                 return;
             }
-            
+
             if (res.status === 403) {
-                document.getElementById('progreso-container').innerHTML = 
+                document.getElementById('progreso-container').innerHTML =
                     '<div class="empty-state"><h3>No tienes permisos para ver esta información</h3></div>';
                 return;
             }
-            
+
             const progreso = await res.json();
             this.renderProgreso(progreso);
         } catch (error) {
             console.error('Error cargando progreso:', error);
-            document.getElementById('progreso-container').innerHTML = 
+            document.getElementById('progreso-container').innerHTML =
                 '<div class="error">Error al cargar el progreso</div>';
         }
     },
 
     renderProgreso(progreso) {
         const container = document.getElementById('progreso-container');
-        
+
         // Remover indicador de actualización
         const updateIndicator = document.querySelector('.update-indicator');
         if (updateIndicator) updateIndicator.remove();
-        
+
         if (!progreso || progreso.length === 0) {
             container.innerHTML = '<div class="empty-state"><h3>No hay datos para esta semana</h3></div>';
             return;
@@ -1067,10 +1067,10 @@ const app = {
         container.innerHTML = `
             <div class="progreso-grid">
                 ${progreso.map(resp => {
-                    const porcentaje = resp.total > 0 ? Math.round((resp.realizadas / resp.total) * 100) : 0;
-                    const porcentajeColor = porcentaje === 100 ? 'var(--success)' : porcentaje >= 50 ? 'var(--primary)' : 'var(--warning)';
-                    
-                    return `
+            const porcentaje = resp.total > 0 ? Math.round((resp.realizadas / resp.total) * 100) : 0;
+            const porcentajeColor = porcentaje === 100 ? 'var(--success)' : porcentaje >= 50 ? 'var(--primary)' : 'var(--warning)';
+
+            return `
                         <div class="progreso-card">
                             <div class="progreso-header">
                                 <h3>${resp.responsable_nombre || 'Sin asignar'}</h3>
@@ -1104,7 +1104,7 @@ const app = {
                             </div>
                         </div>
                     `;
-                }).join('')}
+        }).join('')}
             </div>
         `;
     },
@@ -1130,26 +1130,26 @@ const app = {
             const res = await fetch(`${API_URL}/api/asignaciones/${semana}`, {
                 credentials: 'include'
             });
-            
+
             if (res.status === 401) {
                 window.location.href = '/login.html';
                 return;
             }
-            
+
             const asignaciones = await res.json();
             // Filtrar solo las que tienen notas
             const conNotas = asignaciones.filter(a => a.notas && a.notas.trim() !== '');
             this.renderNotas(conNotas, semana);
         } catch (error) {
             console.error('Error cargando notas:', error);
-            document.getElementById('notas-container').innerHTML = 
+            document.getElementById('notas-container').innerHTML =
                 '<div class="error">Error al cargar las notas</div>';
         }
     },
 
     renderNotas(asignaciones, semana) {
         const container = document.getElementById('notas-container');
-        
+
         if (asignaciones.length === 0) {
             container.innerHTML = '<div class="empty-state"><h3>No hay notas para esta semana</h3><p>Las notas aparecerán aquí cuando se agreguen a las asignaciones.</p></div>';
             return;
@@ -1176,8 +1176,8 @@ const app = {
             </div>
             <div class="asignaciones-grid">
                 ${diasOrden.map(dia => {
-                    if (!porDia[dia]) return '';
-                    return `
+            if (!porDia[dia]) return '';
+            return `
                         <div class="dia-section">
                             <h3>${dia} (${porDia[dia].length} nota${porDia[dia].length > 1 ? 's' : ''})</h3>
                             ${porDia[dia].map(asig => `
@@ -1194,16 +1194,16 @@ const app = {
                                         </div>
                                     </div>
                                     <div class="asignacion-actions">
-                                        ${asig.realizada 
-                                            ? `<span class="tag tag-success">✓ Realizada</span>`
-                                            : `<span class="tag tag-warning">Pendiente</span>`
-                                        }
+                                        ${asig.realizada
+                    ? `<span class="tag tag-success">✓ Realizada</span>`
+                    : `<span class="tag tag-warning">Pendiente</span>`
+                }
                                     </div>
                                 </div>
                             `).join('')}
                         </div>
                     `;
-                }).join('')}
+        }).join('')}
                 ${otrosDias.map(dia => `
                     <div class="dia-section">
                         <h3>${dia}</h3>
@@ -1227,7 +1227,7 @@ const app = {
         // Buscar la asignación para obtener la nota actual
         const asignacion = this.asignaciones.find(a => a.id === asignacionId);
         const notaActual = asignacion?.notas || '';
-        
+
         document.getElementById('nota-asignacion-id').value = asignacionId;
         document.getElementById('nota-texto').value = notaActual;
         this.showModal('nota-modal');
@@ -1235,10 +1235,10 @@ const app = {
 
     async guardarNota(e) {
         e.preventDefault();
-        
+
         const asignacionId = document.getElementById('nota-asignacion-id').value;
         const nota = document.getElementById('nota-texto').value.trim();
-        
+
         try {
             const res = await fetch(`${API_URL}/api/asignaciones/${asignacionId}`, {
                 method: 'PUT',
@@ -1246,12 +1246,12 @@ const app = {
                 credentials: 'include',
                 body: JSON.stringify({ notas: nota })
             });
-            
+
             if (res.status === 401) {
                 window.location.href = '/login.html';
                 return;
             }
-            
+
             if (res.ok) {
                 const data = await res.json();
                 this.closeModal('nota-modal');
@@ -1356,7 +1356,7 @@ const app = {
             factura_email: documentoTipo === 'factura' ? factura_email : null,
             // Operación
             responsable_id: document.getElementById('cliente-responsable').value || null,
-            dia_atencion: document.getElementById('cliente-dia').value || null,
+            dia_atencion: Array.from(document.querySelectorAll('.day-check:checked')).map(cb => cb.value).join(',') || null,
             precio_por_visita: parseFloat(document.getElementById('cliente-precio').value) || 0
         };
 
@@ -1372,7 +1372,7 @@ const app = {
                 credentials: 'include',
                 body: JSON.stringify(cliente)
             });
-            
+
             if (res.status === 401) {
                 window.location.href = '/login.html';
                 return;
@@ -1414,17 +1414,32 @@ const app = {
         if (document.getElementById('factura-email')) document.getElementById('factura-email').value = cliente.factura_email || '';
 
         document.getElementById('cliente-responsable').value = cliente.responsable_id || '';
-        document.getElementById('cliente-dia').value = cliente.dia_atencion || '';
-        document.getElementById('cliente-precio').value = cliente.precio_por_visita || 0;
-        document.getElementById('cliente-modal-title').textContent = 'Editar Cliente';
 
+        // Cargar días
+        const dias = (cliente.dia_atencion || '').split(',').map(d => d.trim());
+        document.querySelectorAll('.day-check').forEach(cb => {
+            cb.checked = dias.includes(cb.value);
+        });
+
+        document.getElementById('cliente-precio').value = cliente.precio_por_visita || 0;
+
+        document.getElementById('cliente-modal-title').textContent = 'Editar Cliente';
+        this.actualizarCamposDocumento();
+        this.showModal('cliente-modal');
+    },
+
+    nuevoCliente() {
+        document.getElementById('cliente-form').reset();
+        document.getElementById('cliente-id').value = '';
+        document.getElementById('cliente-modal-title').textContent = 'Nuevo Cliente';
+        document.querySelectorAll('.day-check').forEach(cb => cb.checked = false);
         this.actualizarCamposDocumento();
         this.showModal('cliente-modal');
     },
 
     async guardarResponsable(e) {
         e.preventDefault();
-        
+
         const nombre = document.getElementById('responsable-nombre').value;
 
         try {
@@ -1434,7 +1449,7 @@ const app = {
                 credentials: 'include',
                 body: JSON.stringify({ nombre })
             });
-            
+
             if (res.status === 401) {
                 window.location.href = '/login.html';
                 return;
@@ -1469,7 +1484,7 @@ const app = {
 
     async registrarVisita(e) {
         e.preventDefault();
-        
+
         const visita = {
             cliente_id: parseInt(document.getElementById('visita-cliente-id').value),
             fecha_visita: document.getElementById('visita-fecha').value,
@@ -1485,7 +1500,7 @@ const app = {
                 credentials: 'include',
                 body: JSON.stringify(visita)
             });
-            
+
             if (res.status === 401) {
                 window.location.href = '/login.html';
                 return;
@@ -1517,42 +1532,55 @@ const app = {
     // Reportes
     async cargarReportes() {
         try {
-            const tbody = document.getElementById('reportes-table-body');
-            if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="10" class="loading">Cargando reportes...</td></tr>';
+            const container = document.getElementById('reportes-container');
+            if (container) {
+                container.innerHTML = '<div class="loading">Cargando reportes...</div>';
             }
-            
+
             const clienteId = document.getElementById('reporte-cliente-filter')?.value || '';
             const responsableId = document.getElementById('reporte-responsable-filter')?.value || '';
-            
+
             let url = `${API_URL}/api/reportes/visitas-sin-pagar?`;
             if (clienteId) url += `cliente_id=${clienteId}&`;
             if (responsableId) url += `responsable_id=${responsableId}&`;
-            
+
             const res = await fetch(url, {
                 credentials: 'include'
             });
-            
+
             if (res.status === 401) {
                 window.location.href = '/login.html';
                 return;
             }
-            
+
             if (res.status === 403) {
-                if (tbody) {
-                    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No tienes permisos para ver reportes</td></tr>';
+                if (container) {
+                    container.innerHTML = '<div class="empty-state">No tienes permisos para ver reportes</div>';
                 }
                 return;
             }
-            
+
             if (!res.ok) {
-                const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }));
+                let errorData;
+                try {
+                    errorData = await res.json();
+                } catch (e) {
+                    // Si no es JSON, leer como texto
+                    const text = await res.text();
+                    throw new Error(`Error HTTP ${res.status}: ${text || 'Error desconocido'}`);
+                }
                 throw new Error(errorData.error || `Error HTTP ${res.status}`);
             }
-            
+
             const visitas = await res.json();
+
+            // Verificar que visitas sea un array
+            if (!Array.isArray(visitas)) {
+                throw new Error('La respuesta del servidor no es válida');
+            }
+
             this.renderReportes(visitas);
-            
+
             // Cargar filtros si no están cargados
             if (this.clientes.length === 0 || this.responsables.length === 0) {
                 await Promise.all([this.cargarClientes(), this.cargarResponsables()]);
@@ -1560,9 +1588,9 @@ const app = {
             this.cargarFiltrosReportes();
         } catch (error) {
             console.error('Error cargando reportes:', error);
-            const tbody = document.getElementById('reportes-table-body');
-            if (tbody) {
-                tbody.innerHTML = `<tr><td colspan="10" class="error">Error al cargar reportes: ${error.message || error}</td></tr>`;
+            const container = document.getElementById('reportes-container');
+            if (container) {
+                container.innerHTML = `<div class="error">Error al cargar reportes: ${error.message || error}</div>`;
             }
         }
     },
@@ -1579,7 +1607,7 @@ const app = {
                 clienteFilter.appendChild(option);
             });
         }
-        
+
         // Cargar responsables en el filtro
         const responsableFilter = document.getElementById('reporte-responsable-filter');
         if (responsableFilter && this.responsables.length > 0) {
@@ -1594,67 +1622,140 @@ const app = {
     },
 
     renderReportes(visitas) {
-        const tbody = document.getElementById('reportes-table-body');
+        const container = document.getElementById('reportes-container');
         const resumenDiv = document.getElementById('reportes-resumen');
         const totalVisitas = document.getElementById('reporte-total-visitas');
         const totalMonto = document.getElementById('reporte-total-monto');
         const btnCopiar = document.getElementById('btn-copiar-whatsapp');
-        
-        if (!tbody) return;
-        
+
+        if (!container) return;
+
         if (visitas.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No hay visitas sin pagar</td></tr>';
+            container.innerHTML = '<div class="empty-state">No hay visitas sin pagar</div>';
             resumenDiv.style.display = 'none';
             if (btnCopiar) btnCopiar.style.display = 'none';
             return;
         }
-        
+
         // Guardar visitas para poder copiarlas después
         this.visitasSinPagar = visitas;
-        
+
         // Calcular totales
         const total = visitas.length;
         const montoTotal = visitas.reduce((sum, v) => sum + (parseFloat(v.precio) || 0), 0);
-        
+
         if (totalVisitas) totalVisitas.textContent = total;
         if (totalMonto) totalMonto.textContent = `$${formatearPrecio(montoTotal)}`;
         if (resumenDiv) resumenDiv.style.display = 'block';
         if (btnCopiar) btnCopiar.style.display = 'inline-block';
-        
-        // Formatear estado de pago
-        const formatearEstadoPago = (estado) => {
-            if (!estado || estado === '') return '<span class="tag tag-warning">Pendiente</span>';
-            if (estado === 'not_paid') return '<span class="tag tag-danger">No Pagado</span>';
-            if (estado === 'partial') return '<span class="tag tag-warning">Parcial</span>';
-            if (estado === 'paid' || estado === 'in_payment') return '<span class="tag tag-success">Pagado</span>';
-            return `<span class="tag tag-info">${estado}</span>`;
-        };
-        
-        // Formatear fecha para mostrar
+
+        // Formatear fecha para mostrar (DD-MM-YYYY)
         const formatearFecha = (fecha) => {
             if (!fecha) return '-';
             try {
                 const d = new Date(fecha);
-                return d.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const dia = String(d.getDate()).padStart(2, '0');
+                const mes = String(d.getMonth() + 1).padStart(2, '0');
+                const año = d.getFullYear();
+                return `${dia}-${mes}-${año}`;
             } catch {
                 return fecha;
             }
         };
-        
-        tbody.innerHTML = visitas.map(v => `
-            <tr>
-                <td>${v.id}</td>
-                <td>${formatearFecha(v.fecha_visita)}</td>
-                <td><strong>${v.cliente_nombre || '-'}</strong></td>
-                <td>${v.cliente_rut || '-'}</td>
-                <td>${v.cliente_direccion || '-'}</td>
-                <td>${v.cliente_comuna || '-'}</td>
-                <td>${v.responsable_nombre || 'Sin asignar'}</td>
-                <td>$${formatearPrecio(v.precio)}</td>
-                <td>${v.odoo_move_name || '<span style="color: #999;">No emitido</span>'}</td>
-                <td>${formatearEstadoPago(v.odoo_payment_state)}</td>
-            </tr>
-        `).join('');
+
+        // Agrupar visitas por cliente
+        const porCliente = {};
+        visitas.forEach(v => {
+            const clienteId = v.cliente_id;
+            if (!porCliente[clienteId]) {
+                porCliente[clienteId] = {
+                    cliente_id: clienteId,
+                    cliente_nombre: v.cliente_nombre || 'Sin nombre',
+                    cliente_rut: v.cliente_rut || '',
+                    cliente_celular: v.cliente_celular || '',
+                    visitas: []
+                };
+            }
+            porCliente[clienteId].visitas.push(v);
+        });
+
+        // Renderizar clientes agrupados
+        let html = '';
+        Object.values(porCliente).forEach(cliente => {
+            const totalCliente = cliente.visitas.reduce((sum, v) => sum + (parseFloat(v.precio) || 0), 0);
+            const fechasVisitas = cliente.visitas.map(v => formatearFecha(v.fecha_visita)).join(', ');
+
+            html += `
+                <div class="cliente-reporte-card" style="background: white; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 2px solid #e0e0e0;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.2rem; color: #333;">${cliente.cliente_nombre}</h3>
+                            ${cliente.cliente_rut ? `<div style="color: #666; font-size: 0.9rem; margin-top: 0.25rem;">RUT: ${cliente.cliente_rut}</div>` : ''}
+                            ${cliente.cliente_celular ? `<div style="color: #666; font-size: 0.9rem;">Tel: ${cliente.cliente_celular}</div>` : ''}
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 1.1rem; font-weight: bold; color: #d32f2f;">
+                                Total Pendiente: $${formatearPrecio(totalCliente)}
+                            </div>
+                            <div style="color: #666; font-size: 0.9rem; margin-top: 0.25rem;">
+                                ${cliente.visitas.length} visita${cliente.visitas.length > 1 ? 's' : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 0.75rem;">
+                        <strong>Visitas sin pagar:</strong> ${fechasVisitas}
+                    </div>
+                    <div>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #f5f5f5;">
+                                    <th style="padding: 0.5rem; text-align: left; border-bottom: 1px solid #ddd; width: 40px;">
+                                        <input type="checkbox" class="check-cliente" data-cliente-id="${cliente.cliente_id}" onchange="app.toggleClienteVisitas(${cliente.cliente_id}, this.checked)">
+                                    </th>
+                                    <th style="padding: 0.5rem; text-align: left; border-bottom: 1px solid #ddd;">Fecha</th>
+                                    <th style="padding: 0.5rem; text-align: left; border-bottom: 1px solid #ddd;">Documento</th>
+                                    <th style="padding: 0.5rem; text-align: right; border-bottom: 1px solid #ddd;">Precio</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${cliente.visitas.map(v => `
+                                    <tr>
+                                        <td style="padding: 0.5rem; border-bottom: 1px solid #eee;">
+                                            <input type="checkbox" class="check-visita" data-visita-id="${v.id}" data-cliente-id="${cliente.cliente_id}" checked>
+                                        </td>
+                                        <td style="padding: 0.5rem; border-bottom: 1px solid #eee;">${formatearFecha(v.fecha_visita)}</td>
+                                        <td style="padding: 0.5rem; border-bottom: 1px solid #eee;">
+                                            ${v.odoo_move_name || '<span style="color: #999;">No emitido</span>'}
+                                        </td>
+                                        <td style="padding: 0.5rem; text-align: right; border-bottom: 1px solid #eee;">
+                                            $${formatearPrecio(v.precio)}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    },
+
+    toggleClienteVisitas(clienteId, checked) {
+        const checkboxes = document.querySelectorAll(`.check-visita[data-cliente-id="${clienteId}"]`);
+        checkboxes.forEach(cb => cb.checked = checked);
+    },
+
+    seleccionarTodoReportes() {
+        const btn = document.getElementById('btn-seleccionar-todo');
+        const allChecked = Array.from(document.querySelectorAll('.check-visita')).every(cb => cb.checked);
+        const newState = !allChecked;
+
+        document.querySelectorAll('.check-visita').forEach(cb => cb.checked = newState);
+        document.querySelectorAll('.check-cliente').forEach(cb => cb.checked = newState);
+
+        btn.textContent = newState ? '☐ Deseleccionar Todo' : '☑️ Seleccionar Todo';
     },
 
     copiarParaWhatsApp() {
@@ -1662,10 +1763,34 @@ const app = {
             this.showToast('No hay visitas para copiar', 'warning', 2000);
             return;
         }
-        
-        // Agrupar por cliente
+
+        // Obtener visitas seleccionadas
+        const checkboxes = document.querySelectorAll('.check-visita:checked');
+        if (checkboxes.length === 0) {
+            this.showToast('Por favor selecciona al menos una visita', 'warning', 2000);
+            return;
+        }
+
+        const visitasSeleccionadasIds = Array.from(checkboxes).map(cb => parseInt(cb.dataset.visitaId));
+        const visitasSeleccionadas = this.visitasSinPagar.filter(v => visitasSeleccionadasIds.includes(v.id));
+
+        // Formatear fecha para WhatsApp (DD-MM-YYYY)
+        const formatearFechaWhatsApp = (fecha) => {
+            if (!fecha) return '';
+            try {
+                const d = new Date(fecha);
+                const dia = String(d.getDate()).padStart(2, '0');
+                const mes = String(d.getMonth() + 1).padStart(2, '0');
+                const año = d.getFullYear();
+                return `${dia}-${mes}-${año}`;
+            } catch {
+                return fecha;
+            }
+        };
+
+        // Agrupar visitas seleccionadas por cliente
         const porCliente = {};
-        this.visitasSinPagar.forEach(v => {
+        visitasSeleccionadas.forEach(v => {
             const clienteId = v.cliente_id;
             if (!porCliente[clienteId]) {
                 porCliente[clienteId] = {
@@ -1675,42 +1800,25 @@ const app = {
             }
             porCliente[clienteId].visitas.push(v);
         });
-        
-        // Formatear fecha para WhatsApp
-        const formatearFechaWhatsApp = (fecha) => {
-            if (!fecha) return 'Fecha no disponible';
-            try {
-                const d = new Date(fecha);
-                return d.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            } catch {
-                return fecha;
-            }
-        };
-        
-        // Construir texto para WhatsApp
-        let texto = '📋 *VISITAS SIN PAGAR*\n\n';
-        
-        let montoTotal = 0;
+
+        // Construir texto para WhatsApp según formato solicitado
+        let textos = [];
+
         Object.values(porCliente).forEach(cliente => {
-            texto += `*${cliente.cliente_nombre}*\n`;
-            let montoCliente = 0;
-            
-            cliente.visitas.forEach(v => {
-                const fecha = formatearFechaWhatsApp(v.fecha_visita);
-                const precio = parseFloat(v.precio) || 0;
-                montoCliente += precio;
-                texto += `  • ${fecha}: $${formatearPrecio(precio)}\n`;
-            });
-            
-            montoTotal += montoCliente;
-            texto += `  *Total: $${formatearPrecio(montoCliente)}*\n\n`;
+            const fechas = cliente.visitas.map(v => formatearFechaWhatsApp(v.fecha_visita)).join('  ');
+            const totalCliente = cliente.visitas.reduce((sum, v) => sum + (parseFloat(v.precio) || 0), 0);
+
+            let textoCliente = `Cliente: ${cliente.cliente_nombre}\n`;
+            textoCliente += `Visitas: ${fechas}\n`;
+            textoCliente += `Total Pendiente de pago: $${formatearPrecio(totalCliente)}`;
+
+            textos.push(textoCliente);
         });
-        
-        texto += `\n*MONTO TOTAL PENDIENTE: $${formatearPrecio(montoTotal)}*\n`;
-        texto += `\nTotal de visitas: ${this.visitasSinPagar.length}`;
-        
+
+        const textoFinal = textos.join('\n\n');
+
         // Copiar al portapapeles
-        navigator.clipboard.writeText(texto).then(() => {
+        navigator.clipboard.writeText(textoFinal).then(() => {
             this.showToast('✅ Texto copiado al portapapeles. Listo para pegar en WhatsApp', 'success', 4000);
         }).catch(err => {
             console.error('Error copiando:', err);
@@ -1721,7 +1829,7 @@ const app = {
                 <div class="modal-content" style="max-width: 600px;">
                     <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
                     <h2>Texto para WhatsApp</h2>
-                    <textarea readonly style="width: 100%; height: 400px; padding: 1rem; font-family: monospace; border: 1px solid #ddd; border-radius: 4px;">${texto}</textarea>
+                    <textarea readonly style="width: 100%; height: 400px; padding: 1rem; font-family: monospace; border: 1px solid #ddd; border-radius: 4px;">${textoFinal}</textarea>
                     <div class="form-actions" style="margin-top: 1rem;">
                         <button class="btn btn-primary" onclick="navigator.clipboard.writeText(this.previousElementSibling.value).then(() => alert('Copiado!')).catch(() => {})">Copiar</button>
                         <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">Cerrar</button>
@@ -1732,31 +1840,97 @@ const app = {
         });
     },
 
-    async descargarReporteExcel() {
+    async sincronizarPagosMes() {
+        const btn = document.getElementById('btn-sync-pagos');
+        const textoOriginal = btn?.textContent || '🔄 Sincronizar Pagos del Mes';
+
         try {
-            this.showToast('Preparando Excel de reportes…', 'info', 2000);
-            
-            const clienteId = document.getElementById('reporte-cliente-filter')?.value || '';
-            const responsableId = document.getElementById('reporte-responsable-filter')?.value || '';
-            
-            let url = `${API_URL}/api/reportes/visitas-sin-pagar/export?`;
-            if (clienteId) url += `cliente_id=${clienteId}&`;
-            if (responsableId) url += `responsable_id=${responsableId}&`;
-            
-            const res = await fetch(url, {
-                credentials: 'include'
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Sincronizando...';
+            }
+
+            this.showToast('Sincronizando estados de pago del mes desde Odoo...', 'info', 3000);
+
+            const res = await fetch(`${API_URL}/api/reportes/sync-pagos-mes`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' }
             });
-            
+
+            if (res.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            if (res.status === 403) {
+                this.showToast('No tienes permisos para sincronizar pagos', 'error', 3000);
+                return;
+            }
+
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
                 throw new Error(data.error || `Error HTTP ${res.status}`);
             }
-            
+
+            const resultado = await res.json();
+
+            let mensaje = '';
+            if (resultado.actualizadas > 0) {
+                mensaje = `✅ Sincronización completada. ${resultado.actualizadas} visita(s) actualizada(s)`;
+                if (resultado.errores > 0) {
+                    mensaje += `, ${resultado.errores} error(es)`;
+                }
+            } else if (resultado.total === 0) {
+                mensaje = 'ℹ️ No hay visitas del mes con documentos en Odoo para sincronizar';
+            } else {
+                mensaje = `✅ Sincronización completada. No hubo cambios en los estados de pago`;
+                if (resultado.errores > 0) {
+                    mensaje += `. ${resultado.errores} error(es)`;
+                }
+            }
+
+            this.showToast(mensaje, resultado.actualizadas > 0 ? 'success' : 'info', 5000);
+
+            // Recargar reportes para reflejar los cambios
+            await this.cargarReportes();
+
+        } catch (e) {
+            console.error('Error sincronizando pagos:', e);
+            this.showToast(`Error al sincronizar pagos: ${e?.message || e}`, 'error', 4500);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = textoOriginal;
+            }
+        }
+    },
+
+    async descargarReporteExcel() {
+        try {
+            this.showToast('Preparando Excel de reportes…', 'info', 2000);
+
+            const clienteId = document.getElementById('reporte-cliente-filter')?.value || '';
+            const responsableId = document.getElementById('reporte-responsable-filter')?.value || '';
+
+            let url = `${API_URL}/api/reportes/visitas-sin-pagar/export?`;
+            if (clienteId) url += `cliente_id=${clienteId}&`;
+            if (responsableId) url += `responsable_id=${responsableId}&`;
+
+            const res = await fetch(url, {
+                credentials: 'include'
+            });
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || `Error HTTP ${res.status}`);
+            }
+
             const blob = await res.blob();
             const cd = res.headers.get('content-disposition') || '';
             const m = /filename="([^"]+)"/i.exec(cd);
             const filename = m?.[1] || 'visitas-sin-pagar.xlsx';
-            
+
             const urlBlob = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = urlBlob;
@@ -1765,7 +1939,7 @@ const app = {
             a.click();
             a.remove();
             URL.revokeObjectURL(urlBlob);
-            
+
             this.showToast('✅ Excel descargado correctamente', 'success', 3000);
         } catch (e) {
             console.error(e);
@@ -1779,38 +1953,38 @@ const app = {
             const semana = document.getElementById('semana-selector')?.value || '';
             let url = `${API_URL}/api/asignaciones/verificar`;
             if (semana) url += `?semana=${semana}`;
-            
+
             this.showToast('Verificando asignaciones...', 'info', 2000);
-            
+
             const res = await fetch(url, {
                 credentials: 'include'
             });
-            
+
             if (res.status === 401) {
                 window.location.href = '/login.html';
                 return;
             }
-            
+
             if (res.status === 403) {
                 this.showToast('Solo administradores pueden verificar asignaciones', 'error', 3000);
                 return;
             }
-            
+
             if (!res.ok) {
                 const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }));
                 throw new Error(errorData.error || `Error HTTP ${res.status}`);
             }
-            
+
             const resultado = await res.json();
-            
+
             // Mostrar resultado
             const div = document.getElementById('asignaciones-verificacion');
             const text = document.getElementById('asignaciones-verificacion-text');
-            
+
             if (div && text) {
                 let mensaje = `📊 Verificación de Asignaciones - Semana: ${resultado.semanaInicio}\n\n`;
                 mensaje += `Total de asignaciones: ${resultado.totalAsignaciones}\n`;
-                
+
                 if (resultado.duplicados && resultado.duplicados.length > 0) {
                     mensaje += `\n⚠️ Duplicados encontrados: ${resultado.duplicados.length}\n`;
                     resultado.duplicados.forEach(dup => {
@@ -1819,7 +1993,7 @@ const app = {
                 } else {
                     mensaje += `\n✅ No hay duplicados\n`;
                 }
-                
+
                 if (resultado.clientesSinAsignacion && resultado.clientesSinAsignacion.length > 0) {
                     mensaje += `\n⚠️ Clientes sin asignación: ${resultado.clientesSinAsignacion.length}\n`;
                     resultado.clientesSinAsignacion.forEach(cliente => {
@@ -1828,10 +2002,10 @@ const app = {
                 } else {
                     mensaje += `\n✅ Todos los clientes tienen asignación\n`;
                 }
-                
+
                 text.textContent = mensaje;
                 div.style.display = 'block';
-                
+
                 this.showToast('Verificación completada', 'success', 3000);
             }
         } catch (error) {
@@ -1844,41 +2018,41 @@ const app = {
         if (!confirm('¿Restaurar asignaciones faltantes para la semana seleccionada?\n\nEsto creará asignaciones para clientes activos que no tienen asignación.')) {
             return;
         }
-        
+
         try {
             const semana = document.getElementById('semana-selector')?.value || '';
-            
+
             this.showToast('Restaurando asignaciones...', 'info', 2000);
-            
+
             const res = await fetch(`${API_URL}/api/asignaciones/restaurar-faltantes`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({ semana })
             });
-            
+
             if (res.status === 401) {
                 window.location.href = '/login.html';
                 return;
             }
-            
+
             if (res.status === 403) {
                 this.showToast('Solo administradores pueden restaurar asignaciones', 'error', 3000);
                 return;
             }
-            
+
             if (!res.ok) {
                 const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }));
                 throw new Error(errorData.error || `Error HTTP ${res.status}`);
             }
-            
+
             const resultado = await res.json();
-            
+
             this.showToast(`✅ ${resultado.restaurados} asignación(es) restaurada(s)`, 'success', 4000);
-            
+
             // Recargar asignaciones
             await this.cargarAsignaciones();
-            
+
             // Ocultar mensaje de verificación
             const div = document.getElementById('asignaciones-verificacion');
             if (div) div.style.display = 'none';
@@ -1890,46 +2064,46 @@ const app = {
 
     async restaurarVisitasAsignaciones() {
         const fechaCreacion = prompt('¿Restaurar asignaciones específicas?\n\nIngresa la fecha de creación (ej: 2026-01-13 21:50:39.945573)\no deja vacío para restaurar todas las asignaciones de la semana:');
-        
+
         try {
             const semana = document.getElementById('semana-selector')?.value || '';
-            
+
             this.showToast('Restaurando relaciones...', 'info', 2000);
-            
+
             const body = { semana };
             if (fechaCreacion && fechaCreacion.trim()) {
                 body.fecha_creacion = fechaCreacion.trim();
             }
-            
+
             const res = await fetch(`${API_URL}/api/asignaciones/restaurar-visitas`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify(body)
             });
-            
+
             if (res.status === 401) {
                 window.location.href = '/login.html';
                 return;
             }
-            
+
             if (res.status === 403) {
                 this.showToast('Solo administradores pueden restaurar relaciones', 'error', 3000);
                 return;
             }
-            
+
             if (!res.ok) {
                 const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }));
                 throw new Error(errorData.error || `Error HTTP ${res.status}`);
             }
-            
+
             const resultado = await res.json();
-            
+
             this.showToast(`✅ ${resultado.restauradas} relación(es) restaurada(s)${resultado.sinVisita ? `, ${resultado.sinVisita} sin visita` : ''}`, 'success', 5000);
-            
+
             // Recargar asignaciones
             await this.cargarAsignaciones();
-            
+
             // Ocultar mensaje de verificación
             const div = document.getElementById('asignaciones-verificacion');
             if (div) div.style.display = 'none';
@@ -1949,12 +2123,12 @@ async function asignarSemanaActual() {
             method: 'POST',
             credentials: 'include'
         });
-        
+
         if (res.status === 401) {
             window.location.href = '/login.html';
             return;
         }
-        
+
         if (res.status === 403) {
             alert('Solo administradores pueden asignar semanas');
             return;

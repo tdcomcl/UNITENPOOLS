@@ -1,0 +1,14 @@
+{
+  "fecha": "2026-01-18T16:12:06.065Z",
+  "timestamp": "2026-01-18_13-12-01",
+  "proyecto": "pisinas-alagrando",
+  "base_datos": {
+    "tipo": "postgresql",
+    "host": "10.10.10.81",
+    "database": "unitenpools"
+  },
+  "archivos": {
+    "base_datos": "database_backup.sql",
+    "proyecto": "backup_proyecto_2026-01-18_13-12-01.tar.gz"
+  }
+}

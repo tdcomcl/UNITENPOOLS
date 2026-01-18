@@ -512,6 +512,23 @@ if (dbType === 'postgresql') {
     return this.db.prepare('SELECT * FROM visitas WHERE id = ?').get(id);
   }
 
+  // Obtener visitas del mes actual con odoo_move_id para sincronizar pagos
+  obtenerVisitasDelMesConOdoo(ano, mes) {
+    // mes es 1-12, año es 4 dígitos
+    const fechaInicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
+    const fechaFin = `${ano}-${String(mes).padStart(2, '0')}-31`;
+    
+    return this.db.prepare(`
+      SELECT id, odoo_move_id, odoo_move_name, odoo_payment_state, fecha_visita
+      FROM visitas
+      WHERE odoo_move_id IS NOT NULL
+        AND fecha_visita >= ?
+        AND fecha_visita <= ?
+        AND realizada = 1
+      ORDER BY fecha_visita
+    `).all(fechaInicio, fechaFin);
+  }
+
   obtenerVisitasCliente(cliente_id, limit = 10) {
     return this.db.prepare(`
       SELECT v.*, c.nombre as cliente_nombre, r.nombre as responsable_nombre

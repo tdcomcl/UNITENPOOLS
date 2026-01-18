@@ -837,12 +837,15 @@ app.put('/api/asignaciones/:id', requireAuth, async (req, res) => {
     let visitaId = asignacion.visita_id || null;
     if (realizada !== undefined && Number(realizada) === 1) {
       try {
-        const hoy = new Date().toISOString().split('T')[0];
+        // Usar la fecha de la asignación (semana_inicio) en lugar de la fecha actual
+        const fechaVisita = asignacion.semana_inicio ? 
+          (asignacion.semana_inicio instanceof Date ? asignacion.semana_inicio.toISOString().split('T')[0] : asignacion.semana_inicio) :
+          new Date().toISOString().split('T')[0];
 
         // 1) Asegurar 1 visita por asignación
         if (!visitaId) {
           // Registrar visita (precio NULL => usa precio_por_visita del cliente)
-          visitaId = await db.registrarVisita(asignacion.cliente_id, hoy, asignacion.responsable_id || null, null, true);
+          visitaId = await db.registrarVisita(asignacion.cliente_id, fechaVisita, asignacion.responsable_id || null, null, true);
           await db.actualizarAsignacion(req.params.id, { visita_id: visitaId });
         }
 
@@ -861,7 +864,7 @@ app.put('/api/asignaciones/:id', requireAuth, async (req, res) => {
             });
             odooResult = await odoo.createInvoiceForVisit({
               cliente,
-              visita: { id: visitaId, fecha_visita: hoy, precio: null },
+              visita: { id: visitaId, fecha_visita: fechaVisita, precio: null },
               partnerId
             });
             await db.actualizarVisita(visitaId, {
@@ -1018,6 +1021,12 @@ app.get('/api/reportes/visitas-sin-pagar', requireAuth, async (req, res) => {
     if (typeof db.obtenerVisitasSinPagar === 'function') {
       const result = db.obtenerVisitasSinPagar(clienteId, responsableId);
       visitas = result instanceof Promise ? await result : result;
+      
+      // Asegurar que visitas sea un array
+      if (!Array.isArray(visitas)) {
+        console.error('[API] obtenerVisitasSinPagar no devolvió un array:', typeof visitas, visitas);
+        visitas = [];
+      }
     } else {
       throw new Error('Función obtenerVisitasSinPagar no encontrada');
     }
@@ -1086,6 +1095,73 @@ app.get('/api/reportes/visitas-sin-pagar/export', requireAuth, async (req, res) 
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(buf);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Sincronizar pagos del mes desde Odoo
+app.post('/api/reportes/sync-pagos-mes', requireAuth, async (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden sincronizar pagos' });
+    }
+    
+    const hoy = new Date();
+    const ano = hoy.getFullYear();
+    const mes = hoy.getMonth() + 1; // getMonth() devuelve 0-11
+    
+    // Obtener visitas del mes actual con odoo_move_id
+    const result = db.obtenerVisitasDelMesConOdoo(ano, mes);
+    const visitas = result instanceof Promise ? await result : result;
+    
+    if (!visitas || visitas.length === 0) {
+      return res.json({ 
+        success: true, 
+        actualizadas: 0, 
+        errores: 0,
+        mensaje: 'No hay visitas del mes con documentos en Odoo para sincronizar'
+      });
+    }
+    
+    let actualizadas = 0;
+    let errores = 0;
+    const erroresDetalle = [];
+    
+    // Sincronizar cada visita
+    for (const visita of visitas) {
+      try {
+        const estadoOdoo = await odoo.getPaymentStateFromOdoo(visita.odoo_move_id);
+        
+        // Solo actualizar si cambió el estado
+        if (estadoOdoo.payment_state !== visita.odoo_payment_state) {
+          db.actualizarVisita(visita.id, {
+            odoo_payment_state: estadoOdoo.payment_state,
+            odoo_last_sync: new Date().toISOString(),
+            odoo_error: null
+          });
+          actualizadas++;
+        }
+      } catch (error) {
+        errores++;
+        const errorMsg = error?.message || String(error);
+        erroresDetalle.push({
+          visita_id: visita.id,
+          odoo_move_id: visita.odoo_move_id,
+          error: errorMsg
+        });
+        console.error(`[Sync Pagos] Error sincronizando visita ${visita.id}:`, errorMsg);
+      }
+    }
+    
+    res.json({
+      success: true,
+      actualizadas,
+      errores,
+      total: visitas.length,
+      erroresDetalle: erroresDetalle.length > 0 ? erroresDetalle : undefined
+    });
+  } catch (error) {
+    console.error('[API] Error sincronizando pagos del mes:', error);
     res.status(500).json({ error: error.message });
   }
 });

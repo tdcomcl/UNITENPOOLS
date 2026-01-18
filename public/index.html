@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Mantenimiento de Piscinas</title>
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
     <nav class="navbar">
         <div class="nav-container">
@@ -64,25 +66,29 @@
                     <button class="btn btn-secondary" id="btn-exportar-clientes" onclick="app.descargarClientesExcel()">
                         ⬇️ Descargar Excel
                     </button>
-                    <button class="btn btn-secondary" id="btn-importar-clientes" onclick="app.seleccionarImportExcelClientes()">
+                    <button class="btn btn-secondary" id="btn-importar-clientes"
+                        onclick="app.seleccionarImportExcelClientes()">
                         ⬆️ Importar Excel
                     </button>
                     <input type="file" id="clientes-import-file" accept=".xlsx,.xls" style="display:none">
-                    <button class="btn btn-primary" id="btn-nuevo-cliente" onclick="app.showModal('cliente-modal')">
+                    <button class="btn btn-primary" id="btn-nuevo-cliente" onclick="app.nuevoCliente()">
                         + Nuevo Cliente
                     </button>
                 </div>
             </div>
-            <div id="clientes-import-result" class="section" style="display:none; background:#fff7e6; border-left:4px solid #f59e0b; padding:0.75rem; margin-bottom:1rem;">
+            <div id="clientes-import-result" class="section"
+                style="display:none; background:#fff7e6; border-left:4px solid #f59e0b; padding:0.75rem; margin-bottom:1rem;">
                 <div style="font-weight:600; margin-bottom:0.25rem;">Importación Excel</div>
                 <div id="clientes-import-result-text" style="white-space:pre-wrap;"></div>
             </div>
-            <div id="clientes-info-responsable" style="display: none;" class="section" style="background: #e7f3ff; border-left: 4px solid #0066cc; margin-bottom: 1.5rem; padding: 1rem;">
+            <div id="clientes-info-responsable" style="display: none;" class="section"
+                style="background: #e7f3ff; border-left: 4px solid #0066cc; margin-bottom: 1.5rem; padding: 1rem;">
                 <p><strong>Vista limitada:</strong> Solo puedes ver nombre y dirección de tus clientes asignados.</p>
             </div>
             <div class="filters-panel">
                 <div class="filters">
-                    <input type="text" id="cliente-search" placeholder="Buscar cliente..." onkeyup="app.filtrarClientes()">
+                    <input type="text" id="cliente-search" placeholder="Buscar cliente..."
+                        onkeyup="app.filtrarClientes()">
                     <select id="documento-filter" onchange="app.filtrarClientes()">
                         <option value="">Todos los documentos</option>
                         <option value="invoice">Invoice</option>
@@ -147,7 +153,9 @@
                         </tr>
                     </thead>
                     <tbody id="clientes-table-body">
-                        <tr><td colspan="9" class="loading">Cargando...</td></tr>
+                        <tr>
+                            <td colspan="9" class="loading">Cargando...</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -159,13 +167,16 @@
                 <h2>Asignaciones Semanales</h2>
                 <div class="header-actions">
                     <input type="date" id="semana-selector" onchange="app.cargarAsignaciones()">
-                    <button class="btn btn-secondary" onclick="app.verificarAsignaciones()" id="btn-verificar-asignaciones" style="display: none;">
+                    <button class="btn btn-secondary" onclick="app.verificarAsignaciones()"
+                        id="btn-verificar-asignaciones" style="display: none;">
                         🔍 Verificar
                     </button>
-                    <button class="btn btn-success" onclick="app.restaurarAsignacionesFaltantes()" id="btn-restaurar-asignaciones" style="display: none;">
+                    <button class="btn btn-success" onclick="app.restaurarAsignacionesFaltantes()"
+                        id="btn-restaurar-asignaciones" style="display: none;">
                         🔧 Restaurar Faltantes
                     </button>
-                    <button class="btn btn-warning" onclick="app.restaurarVisitasAsignaciones()" id="btn-restaurar-visitas" style="display: none;">
+                    <button class="btn btn-warning" onclick="app.restaurarVisitasAsignaciones()"
+                        id="btn-restaurar-visitas" style="display: none;">
                         🔗 Restaurar Visitas
                     </button>
                     <button class="btn btn-primary" onclick="asignarSemanaActual()">
@@ -173,7 +184,8 @@
                     </button>
                 </div>
             </div>
-            <div id="asignaciones-verificacion" class="section" style="display: none; background: #fff7e6; border-left: 4px solid #f59e0b; padding: 0.75rem; margin-bottom: 1rem;">
+            <div id="asignaciones-verificacion" class="section"
+                style="display: none; background: #fff7e6; border-left: 4px solid #f59e0b; padding: 0.75rem; margin-bottom: 1rem;">
                 <div id="asignaciones-verificacion-text" style="white-space: pre-wrap;"></div>
             </div>
             <div id="asignaciones-container">
@@ -224,48 +236,39 @@
                     <select id="reporte-responsable-filter" onchange="app.cargarReportes()">
                         <option value="">Todos los responsables</option>
                     </select>
+                    <button class="btn btn-secondary" onclick="app.sincronizarPagosMes()" id="btn-sync-pagos">
+                        🔄 Sincronizar Pagos del Mes
+                    </button>
                     <button class="btn btn-primary" onclick="app.descargarReporteExcel()">
                         📥 Descargar Excel
                     </button>
                 </div>
             </div>
-            <div id="reportes-resumen" class="section" style="display: none; background: #f0f0f0; padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
+            <div id="reportes-resumen" class="section"
+                style="display: none; background: #f0f0f0; padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
                 <div style="display: flex; gap: 2rem; flex-wrap: wrap; align-items: center;">
                     <div>
-                        <strong>Total de visitas sin pagar:</strong> 
+                        <strong>Total de visitas sin pagar:</strong>
                         <span id="reporte-total-visitas">0</span>
                     </div>
                     <div>
-                        <strong>Monto total pendiente:</strong> 
+                        <strong>Monto total pendiente:</strong>
                         <span id="reporte-total-monto">$0</span>
                     </div>
                     <div style="margin-left: auto;">
-                        <button class="btn btn-success" onclick="app.copiarParaWhatsApp()" id="btn-copiar-whatsapp" style="display: none;">
+                        <button class="btn btn-secondary" onclick="app.seleccionarTodoReportes()"
+                            id="btn-seleccionar-todo">
+                            ☑️ Seleccionar Todo
+                        </button>
+                        <button class="btn btn-success" onclick="app.copiarParaWhatsApp()" id="btn-copiar-whatsapp"
+                            style="display: none;">
                             📋 Copiar para WhatsApp
                         </button>
                     </div>
                 </div>
             </div>
-            <div class="table-container">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Fecha</th>
-                            <th>Cliente</th>
-                            <th>RUT</th>
-                            <th>Dirección</th>
-                            <th>Comuna</th>
-                            <th>Responsable</th>
-                            <th>Precio</th>
-                            <th>Documento Odoo</th>
-                            <th>Estado Pago</th>
-                        </tr>
-                    </thead>
-                    <tbody id="reportes-table-body">
-                        <tr><td colspan="10" class="loading">Cargando reportes...</td></tr>
-                    </tbody>
-                </table>
+            <div id="reportes-container">
+                <div class="loading">Cargando reportes...</div>
             </div>
         </div>
 
@@ -287,7 +290,9 @@
                         </tr>
                     </thead>
                     <tbody id="responsables-table-body">
-                        <tr><td colspan="3" class="loading">Cargando...</td></tr>
+                        <tr>
+                            <td colspan="3" class="loading">Cargando...</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -364,28 +369,43 @@
                 <div class="form-group">
                     <label>Responsable</label>
                     <select id="cliente-responsable">
-                        <option value="">Sin asignar</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Día de Atención</label>
-                    <select id="cliente-dia">
-                        <option value="">Sin asignar</option>
-                        <option value="Lunes">Lunes</option>
-                        <option value="Martes">Martes</option>
-                        <option value="Miércoles">Miércoles</option>
-                        <option value="Jueves">Jueves</option>
-                        <option value="Viernes">Viernes</option>
-                        <option value="Sábado">Sábado</option>
-                        <option value="Domingo">Domingo</option>
-                    </select>
+                    <label>Día de Atención (Selecciona uno o más)</label>
+                    <div id="cliente-dias-container" class="days-checkbox-container"
+                        style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 0.5rem; background: #f8f9fa; padding: 1rem; border-radius: 4px; border: 1px solid #ddd;">
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin: 0;"><input
+                                type="checkbox" value="Lunes" class="day-check" style="width: auto;"> Lunes</label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin: 0;"><input
+                                type="checkbox" value="Martes" class="day-check" style="width: auto;"> Martes</label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin: 0;"><input
+                                type="checkbox" value="Miércoles" class="day-check" style="width: auto;">
+                            Miércoles</label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin: 0;"><input
+                                type="checkbox" value="Jueves" class="day-check" style="width: auto;"> Jueves</label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin: 0;"><input
+                                type="checkbox" value="Viernes" class="day-check" style="width: auto;"> Viernes</label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin: 0;"><input
+                                type="checkbox" value="Sábado" class="day-check" style="width: auto;"> Sábado</label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin: 0;"><input
+                                type="checkbox" value="Domingo" class="day-check" style="width: auto;"> Domingo</label>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>Precio por Visita</label>
                     <input type="number" id="cliente-precio" min="0" step="0.01" value="0">
                 </div>
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="app.closeModal('cliente-modal')">Cancelar</button>
+                    <button type="button" class="btn btn-secondary"
+                        onclick="app.closeModal('cliente-modal')">Cancelar</button>
                     <button type="submit" class="btn btn-primary">Guardar</button>
                 </div>
             </form>
@@ -403,7 +423,8 @@
                     <input type="text" id="responsable-nombre" required>
                 </div>
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="app.closeModal('responsable-modal')">Cancelar</button>
+                    <button type="button" class="btn btn-secondary"
+                        onclick="app.closeModal('responsable-modal')">Cancelar</button>
                     <button type="submit" class="btn btn-primary">Guardar</button>
                 </div>
             </form>
@@ -419,10 +440,12 @@
                 <input type="hidden" id="nota-asignacion-id">
                 <div class="form-group">
                     <label>Nota</label>
-                    <textarea id="nota-texto" rows="4" placeholder="Escribe una nota sobre esta asignación..."></textarea>
+                    <textarea id="nota-texto" rows="4"
+                        placeholder="Escribe una nota sobre esta asignación..."></textarea>
                 </div>
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="app.closeModal('nota-modal')">Cancelar</button>
+                    <button type="button" class="btn btn-secondary"
+                        onclick="app.closeModal('nota-modal')">Cancelar</button>
                     <button type="submit" class="btn btn-primary">Guardar</button>
                 </div>
             </form>
@@ -455,7 +478,8 @@
                     <input type="number" id="visita-precio" min="0" step="0.01">
                 </div>
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="app.closeModal('visita-modal')">Cancelar</button>
+                    <button type="button" class="btn btn-secondary"
+                        onclick="app.closeModal('visita-modal')">Cancelar</button>
                     <button type="submit" class="btn btn-primary">Registrar</button>
                 </div>
             </form>
@@ -471,18 +495,20 @@
             <form id="excel-import-password-form" onsubmit="app.verificarPasswordImportExcel(event)">
                 <div class="form-group">
                     <label>Contraseña *</label>
-                    <input type="password" id="excel-import-password" required autofocus placeholder="Ingresa la contraseña">
+                    <input type="password" id="excel-import-password" required autofocus
+                        placeholder="Ingresa la contraseña">
                 </div>
                 <div id="excel-import-password-error" style="color: #dc3545; margin-bottom: 1rem; display: none;"></div>
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="app.closeModal('excel-import-password-modal')">Cancelar</button>
+                    <button type="button" class="btn btn-secondary"
+                        onclick="app.closeModal('excel-import-password-modal')">Cancelar</button>
                     <button type="submit" class="btn btn-primary">Continuar</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <script src="app.js?v=7.0"></script>
+    <script src="app.js?v=10.0"></script>
 </body>
-</html>
 
+</html>

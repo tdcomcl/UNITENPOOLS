@@ -8,7 +8,7 @@ const { Pool } = require('pg');
 class PiscinasDB {
   constructor() {
     const dbType = process.env.DB_TYPE || 'sqlite';
-    
+
     if (dbType !== 'postgresql') {
       throw new Error('Este archivo es solo para PostgreSQL. Usa database.js para SQLite o configura DB_TYPE=postgresql');
     }
@@ -63,7 +63,7 @@ class PiscinasDB {
     const fs = require('fs');
     const path = require('path');
     const schemaPath = path.join(__dirname, 'schema_postgresql.sql');
-    
+
     if (fs.existsSync(schemaPath)) {
       const schema = fs.readFileSync(schemaPath, 'utf8');
       try {
@@ -71,9 +71,9 @@ class PiscinasDB {
         console.log('✅ Esquema PostgreSQL inicializado');
       } catch (error) {
         // Ignorar errores de "ya existe" (tablas, índices, triggers, funciones)
-        if (!error.message.includes('already exists') && 
-            !error.message.includes('ya existe') &&
-            !error.message.includes('duplicate key')) {
+        if (!error.message.includes('already exists') &&
+          !error.message.includes('ya existe') &&
+          !error.message.includes('duplicate key')) {
           console.error('Error inicializando esquema:', error.message);
         }
         // Si hay error pero es porque ya existe, está bien
@@ -111,7 +111,7 @@ class PiscinasDB {
     let whereClause = '';
     const params = [];
     let paramIndex = 1;
-    
+
     if (responsableId) {
       whereClause = `WHERE c.responsable_id = $${paramIndex++}`;
       params.push(responsableId);
@@ -121,7 +121,7 @@ class PiscinasDB {
     } else if (activosOnly) {
       whereClause = 'WHERE c.activo = 1';
     }
-    
+
     const query = `SELECT c.*, r.nombre as responsable_nombre 
                    FROM clientes c
                    LEFT JOIN responsables r ON c.responsable_id = r.id
@@ -141,13 +141,13 @@ class PiscinasDB {
     return result.rows[0] ? this.rowToObject(result.rows[0]) : null;
   }
 
-  async agregarCliente(nombre, direccion = null, comuna = null, celular = null, 
-                 responsable_id = null, dia_atencion = null, precio_por_visita = 0,
-                 rut = null, email = null, documento_tipo = 'invoice',
-                 factura_razon_social = null, factura_rut = null, factura_giro = null,
-                 factura_direccion = null, factura_comuna = null, factura_email = null,
-                 invoice_nombre = null, invoice_tax_id = null, invoice_direccion = null,
-                 invoice_comuna = null, invoice_email = null, invoice_pais = null) {
+  async agregarCliente(nombre, direccion = null, comuna = null, celular = null,
+    responsable_id = null, dia_atencion = null, precio_por_visita = 0,
+    rut = null, email = null, documento_tipo = 'invoice',
+    factura_razon_social = null, factura_rut = null, factura_giro = null,
+    factura_direccion = null, factura_comuna = null, factura_email = null,
+    invoice_nombre = null, invoice_tax_id = null, invoice_direccion = null,
+    invoice_comuna = null, invoice_email = null, invoice_pais = null) {
     // Backward compatible: permitir pasar un objeto
     if (typeof nombre === 'object' && nombre !== null) {
       const c = nombre;
@@ -198,16 +198,16 @@ class PiscinasDB {
     const fields = [];
     const values = [];
     let paramIndex = 1;
-    
+
     Object.keys(updates).forEach(key => {
       if (updates[key] !== undefined) {
         fields.push(`${key} = $${paramIndex++}`);
         values.push(updates[key]);
       }
     });
-    
+
     if (fields.length === 0) return;
-    
+
     values.push(id);
     const query = `UPDATE clientes SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${paramIndex}`;
     await this.query(query, values);
@@ -226,12 +226,12 @@ class PiscinasDB {
     let whereClause = 'WHERE a.semana_inicio = $1';
     const params = [semanaInicio];
     let paramIndex = 2;
-    
+
     if (responsableId) {
       whereClause += ` AND a.responsable_id = $${paramIndex++}`;
       params.push(responsableId);
     }
-    
+
     const result = await this.query(`
       SELECT a.*, c.nombre as cliente_nombre, c.direccion, c.comuna, c.celular,
              r.nombre as responsable_nombre, a.precio as precio
@@ -241,7 +241,7 @@ class PiscinasDB {
       ${whereClause}
       ORDER BY a.dia_atencion, c.nombre
     `, params);
-    
+
     console.log(`[DB] Obtenidas ${result.rows.length} asignaciones para semana ${semanaInicio}`);
     return result.rows.map(r => this.rowToObject(r));
   }
@@ -264,56 +264,76 @@ class PiscinasDB {
     let asignados = 0;
     let actualizados = 0;
     let preservados = 0;
-    
+
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       for (const cliente of clientes) {
-        // Verificar si ya existe la asignación
-        const checkResult = await client.query(`
-          SELECT id, visita_id, realizada FROM asignaciones_semanales
-          WHERE semana_inicio = $1 AND cliente_id = $2
-        `, [semanaInicio, cliente.id]);
-        
-        if (checkResult.rows.length > 0) {
-          const existente = checkResult.rows[0];
-          
-          // Si ya existe y tiene visita_id o está realizada, preservarla
-          if (existente.visita_id || existente.realizada) {
-            preservados++;
-            continue; // No tocar esta asignación
+        // Soporte para múltiples días (ej: "Lunes,Jueves" o "Lunes, Jueves")
+        const dias = (cliente.dia_atencion || '').split(',').map(d => d.trim()).filter(d => d);
+
+        // Si no tiene día asignado, usar null/vacío para crear almenos una (o decidir si saltar)
+        // Comportamiento actual: si no tiene día, crea una con dia_atencion=null
+        if (dias.length === 0) dias.push(null);
+
+        for (const dia of dias) {
+          // Verificar si ya existe la asignación para esta semana+cliente+dia
+          let checkQuery = `
+              SELECT id, visita_id, realizada FROM asignaciones_semanales
+              WHERE semana_inicio = $1 AND cliente_id = $2
+            `;
+          const checkParams = [semanaInicio, cliente.id];
+
+          if (dia) {
+            checkQuery += ` AND dia_atencion = $3`;
+            checkParams.push(dia);
+          } else {
+            checkQuery += ` AND dia_atencion IS NULL`;
           }
-          
-          // Si existe pero no tiene visita, actualizar solo campos básicos
-          await client.query(`
-            UPDATE asignaciones_semanales
-            SET responsable_id = $1,
-                dia_atencion = $2,
-                precio = $3
-            WHERE semana_inicio = $4 AND cliente_id = $5 AND (visita_id IS NULL OR realizada = 0)
-          `, [cliente.responsable_id, cliente.dia_atencion, cliente.precio_por_visita, semanaInicio, cliente.id]);
-          actualizados++;
-        } else {
-          // No existe, crear nueva
-          await client.query(`
-            INSERT INTO asignaciones_semanales
-            (semana_inicio, cliente_id, responsable_id, dia_atencion, precio)
-            VALUES ($1, $2, $3, $4, $5)
-          `, [semanaInicio, cliente.id, cliente.responsable_id, cliente.dia_atencion, cliente.precio_por_visita]);
-          asignados++;
+
+          const checkResult = await client.query(checkQuery, checkParams);
+
+          if (checkResult.rows.length > 0) {
+            const existente = checkResult.rows[0];
+
+            // Si ya existe y tiene visita_id o está realizada, preservarla
+            if (existente.visita_id || existente.realizada) {
+              preservados++;
+              continue; // No tocar esta asignación
+            }
+
+            // Si existe pero no tiene visita, actualizar
+            // Solo actualizamos si no está realizada ni tiene visita
+            // La condición del update debe matching exactamente la row encontrada
+            await client.query(`
+                UPDATE asignaciones_semanales
+                SET responsable_id = $1,
+                    precio = $2
+                WHERE id = $3
+              `, [cliente.responsable_id, cliente.precio_por_visita, existente.id]);
+            actualizados++;
+          } else {
+            // No existe, crear nueva
+            await client.query(`
+                INSERT INTO asignaciones_semanales
+                (semana_inicio, cliente_id, responsable_id, dia_atencion, precio)
+                VALUES ($1, $2, $3, $4, $5)
+              `, [semanaInicio, cliente.id, cliente.responsable_id, dia, cliente.precio_por_visita]);
+            asignados++;
+          }
         }
       }
-      
+
       await client.query('COMMIT');
-      console.log(`[DB] Asignaciones: ${asignados} nuevas, ${actualizados} actualizadas, ${preservados} preservadas (con visita)`);
+      console.log(`[DB] Asignaciones: ${asignados} nuevas, ${actualizados} actualizadas, ${preservados} preservadas`);
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
     }
-    
+
     return asignados + actualizados;
   }
 
@@ -328,19 +348,19 @@ class PiscinasDB {
     const fields = [];
     const values = [];
     let paramIndex = 1;
-    
+
     Object.keys(updates).forEach(key => {
       if (updates[key] !== undefined) {
         fields.push(`${key} = $${paramIndex++}`);
         values.push(updates[key]);
       }
     });
-    
+
     if (fields.length === 0) return;
-    
+
     values.push(id);
     const query = `UPDATE asignaciones_semanales SET ${fields.join(', ')} WHERE id = $${paramIndex}`;
-    
+
     console.log(`[DB] Actualizando asignación ${id}:`, updates);
     await this.query(query, values);
   }
@@ -351,13 +371,13 @@ class PiscinasDB {
       const cliente = await this.obtenerClientePorId(cliente_id);
       precio = cliente ? cliente.precio_por_visita : 0;
     }
-    
+
     // Asegurar tipos correctos para PostgreSQL - convertir undefined a null
     const clienteIdInt = parseInt(cliente_id, 10);
     const responsableIdInt = (responsable_id !== null && responsable_id !== undefined) ? parseInt(responsable_id, 10) : null;
     const precioDecimal = (precio !== null && precio !== undefined) ? parseFloat(precio) : null;
     const realizadaInt = realizada ? 1 : 0;
-    
+
     // Preparar parámetros asegurando que null sea null (no undefined)
     const params = [
       clienteIdInt,
@@ -366,7 +386,7 @@ class PiscinasDB {
       precioDecimal === undefined ? null : precioDecimal,
       realizadaInt
     ];
-    
+
     try {
       const result = await this.query(`
         INSERT INTO visitas
@@ -413,16 +433,16 @@ class PiscinasDB {
     const fields = [];
     const values = [];
     let paramIndex = 1;
-    
+
     Object.keys(updates).forEach(key => {
       if (updates[key] !== undefined) {
         fields.push(`${key} = $${paramIndex++}`);
         values.push(updates[key]);
       }
     });
-    
+
     if (fields.length === 0) return;
-    
+
     values.push(id);
     const query = `UPDATE visitas SET ${fields.join(', ')} WHERE id = $${paramIndex}`;
     await this.query(query, values);
@@ -441,6 +461,25 @@ class PiscinasDB {
     return result.rows.map(r => this.rowToObject(r));
   }
 
+  // Obtener visitas del mes actual con odoo_move_id para sincronizar pagos
+  async obtenerVisitasDelMesConOdoo(ano, mes) {
+    // mes es 1-12, año es 4 dígitos
+    const fechaInicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
+    const fechaFin = `${ano}-${String(mes).padStart(2, '0')}-31`;
+
+    const result = await this.query(`
+      SELECT id, odoo_move_id, odoo_move_name, odoo_payment_state, fecha_visita
+      FROM visitas
+      WHERE odoo_move_id IS NOT NULL
+        AND fecha_visita >= $1::date
+        AND fecha_visita <= $2::date
+        AND realizada = 1
+      ORDER BY fecha_visita
+    `, [fechaInicio, fechaFin]);
+
+    return result.rows.map(r => this.rowToObject(r));
+  }
+
   // Obtener visitas sin pagar (para reportes)
   async obtenerVisitasSinPagar(clienteId = null, responsableId = null) {
     let whereClause = `WHERE v.realizada = 1 AND (
@@ -452,17 +491,17 @@ class PiscinasDB {
     )`;
     const params = [];
     let paramIndex = 1;
-    
+
     if (clienteId) {
       whereClause += ` AND v.cliente_id = $${paramIndex++}`;
       params.push(clienteId);
     }
-    
+
     if (responsableId) {
       whereClause += ` AND v.responsable_id = $${paramIndex++}`;
       params.push(responsableId);
     }
-    
+
     try {
       const result = await this.query(`
         SELECT 
@@ -500,33 +539,33 @@ class PiscinasDB {
     let asignacionWhere = '';
     const params = [];
     let paramIndex = 1;
-    
+
     if (responsableId) {
       clienteWhere = `WHERE activo = 1 AND responsable_id = $${paramIndex++}`;
       asignacionWhere = `AND responsable_id = $${paramIndex++}`;
       params.push(responsableId, responsableId);
     }
-    
+
     const totalClientesResult = await this.query(
-      `SELECT COUNT(*) as total FROM clientes ${clienteWhere}`, 
+      `SELECT COUNT(*) as total FROM clientes ${clienteWhere}`,
       responsableId ? [responsableId] : []
     );
     const totalClientes = parseInt(totalClientesResult.rows[0].total, 10);
-    
+
     const totalResponsablesResult = await this.query(
       'SELECT COUNT(*) as total FROM responsables WHERE activo = 1'
     );
     const totalResponsables = parseInt(totalResponsablesResult.rows[0].total, 10);
-    
+
     const semanaActual = this.obtenerSemanaActual();
-    
+
     const asignacionQuery = responsableId
       ? `SELECT COUNT(*) as total FROM asignaciones_semanales WHERE semana_inicio = $1 ${asignacionWhere}`
       : 'SELECT COUNT(*) as total FROM asignaciones_semanales WHERE semana_inicio = $1';
-    
+
     const asignacionesResult = await this.query(asignacionQuery, params.length > 0 ? [semanaActual, ...params] : [semanaActual]);
     const asignacionesSemana = parseInt(asignacionesResult.rows[0].total, 10);
-    
+
     return {
       totalClientes,
       totalResponsables,
@@ -605,11 +644,11 @@ class PiscinasDB {
 
     const asignaciones = result.rows.map(r => this.rowToObject(r));
     const porResponsable = {};
-    
+
     asignaciones.forEach(asig => {
       const respId = asig.responsable_id || 0;
       const respNombre = asig.responsable_nombre || 'Sin asignar';
-      
+
       if (!porResponsable[respId]) {
         porResponsable[respId] = {
           responsable_id: respId,
@@ -620,14 +659,14 @@ class PiscinasDB {
           por_dia: {}
         };
       }
-      
+
       porResponsable[respId].total++;
       if (asig.realizada) {
         porResponsable[respId].realizadas++;
       } else {
         porResponsable[respId].pendientes++;
       }
-      
+
       const dia = asig.dia_atencion || 'Sin día';
       if (!porResponsable[respId].por_dia[dia]) {
         porResponsable[respId].por_dia[dia] = { total: 0, realizadas: 0 };
@@ -638,7 +677,7 @@ class PiscinasDB {
       }
     });
 
-    return Object.values(porResponsable).sort((a, b) => 
+    return Object.values(porResponsable).sort((a, b) =>
       a.responsable_nombre.localeCompare(b.responsable_nombre)
     );
   }
