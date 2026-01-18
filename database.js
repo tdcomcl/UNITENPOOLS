@@ -449,6 +449,53 @@ if (dbType === 'postgresql') {
     return this.db.prepare('SELECT * FROM asignaciones_semanales WHERE id = ?').get(id);
   }
 
+  // Asignar manualmente un cliente a una semana específica
+  asignarClienteManual(clienteId, semanaInicio, responsableId = null, diaAtencion = null, precio = null) {
+    // Obtener datos del cliente si no se proporcionan
+    const cliente = this.obtenerClientePorId(clienteId);
+    if (!cliente) {
+      throw new Error('Cliente no encontrado');
+    }
+
+    // Usar valores del cliente si no se proporcionan
+    const responsableIdFinal = responsableId !== null ? responsableId : cliente.responsable_id;
+    const diaAtencionFinal = diaAtencion !== null ? diaAtencion : cliente.dia_atencion;
+    const precioFinal = precio !== null ? precio : cliente.precio_por_visita;
+
+    // Verificar si ya existe una asignación para esta semana y cliente
+    const existente = this.db.prepare(`
+      SELECT id, visita_id, realizada FROM asignaciones_semanales
+      WHERE semana_inicio = ? AND cliente_id = ?
+    `).get(semanaInicio, clienteId);
+
+    if (existente) {
+      // Si ya tiene visita o está realizada, no se puede modificar
+      if (existente.visita_id || existente.realizada) {
+        throw new Error('Este cliente ya tiene una asignación realizada para esta semana. No se puede modificar.');
+      }
+
+      // Actualizar la asignación existente
+      this.db.prepare(`
+        UPDATE asignaciones_semanales
+        SET responsable_id = ?,
+            dia_atencion = ?,
+            precio = ?
+        WHERE id = ?
+      `).run(responsableIdFinal, diaAtencionFinal, precioFinal, existente.id);
+
+      return { id: existente.id, action: 'updated' };
+    } else {
+      // Crear nueva asignación
+      const stmt = this.db.prepare(`
+        INSERT INTO asignaciones_semanales
+        (semana_inicio, cliente_id, responsable_id, dia_atencion, precio)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      const info = stmt.run(semanaInicio, clienteId, responsableIdFinal, diaAtencionFinal, precioFinal);
+      return { id: info.lastInsertRowid, action: 'created' };
+    }
+  }
+
   actualizarAsignacion(id, updates) {
     const fields = [];
     const values = [];

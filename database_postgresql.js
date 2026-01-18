@@ -151,7 +151,7 @@ class PiscinasDB {
     // Backward compatible: permitir pasar un objeto
     if (typeof nombre === 'object' && nombre !== null) {
       const c = nombre;
-      return this.agregarCliente(
+      return await this.agregarCliente(
         c.nombre,
         c.direccion ?? null,
         c.comuna ?? null,
@@ -177,6 +177,42 @@ class PiscinasDB {
       );
     }
 
+    // Asegurar que undefined se convierta a null para PostgreSQL
+    const params = [
+      nombre || null,
+      rut || null,
+      direccion || null,
+      comuna || null,
+      celular || null,
+      email || null,
+      documento_tipo || 'invoice',
+      factura_razon_social || null,
+      factura_rut || null,
+      factura_giro || null,
+      factura_direccion || null,
+      factura_comuna || null,
+      factura_email || null,
+      invoice_nombre || null,
+      invoice_tax_id || null,
+      invoice_direccion || null,
+      invoice_comuna || null,
+      invoice_email || null,
+      invoice_pais || null,
+      responsable_id || null,
+      dia_atencion || null,
+      precio_por_visita || 0
+    ];
+
+    // Sincronizar secuencia antes de insertar para evitar errores de clave duplicada
+    try {
+      await this.query(`
+        SELECT setval('clientes_id_seq', (SELECT COALESCE(MAX(id),0)+1 FROM clientes), false)
+      `);
+    } catch (seqError) {
+      // Si falla la sincronización, continuar de todas formas (puede que la secuencia no exista)
+      console.warn('[DB] No se pudo sincronizar secuencia de clientes:', seqError.message);
+    }
+
     const result = await this.query(`
       INSERT INTO clientes 
       (nombre, rut, direccion, comuna, celular, email, documento_tipo,
@@ -185,12 +221,7 @@ class PiscinasDB {
        responsable_id, dia_atencion, precio_por_visita)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
       RETURNING id
-    `, [
-      nombre, rut, direccion, comuna, celular, email, documento_tipo,
-      factura_razon_social, factura_rut, factura_giro, factura_direccion, factura_comuna, factura_email,
-      invoice_nombre, invoice_tax_id, invoice_direccion, invoice_comuna, invoice_email, invoice_pais,
-      responsable_id, dia_atencion, precio_por_visita
-    ]);
+    `, params);
     return result.rows[0].id;
   }
 
@@ -342,6 +373,57 @@ class PiscinasDB {
       SELECT * FROM asignaciones_semanales WHERE id = $1
     `, [id]);
     return result.rows[0] ? this.rowToObject(result.rows[0]) : null;
+  }
+
+  // Asignar manualmente un cliente a una semana específica
+  async asignarClienteManual(clienteId, semanaInicio, responsableId = null, diaAtencion = null, precio = null) {
+    // Obtener datos del cliente si no se proporcionan
+    const cliente = await this.obtenerClientePorId(clienteId);
+    if (!cliente) {
+      throw new Error('Cliente no encontrado');
+    }
+
+    // Usar valores del cliente si no se proporcionan
+    const responsableIdFinal = responsableId !== null ? responsableId : cliente.responsable_id;
+    const diaAtencionFinal = diaAtencion !== null ? diaAtencion : cliente.dia_atencion;
+    const precioFinal = precio !== null ? precio : cliente.precio_por_visita;
+
+    // Verificar si ya existe una asignación para esta semana y cliente
+    const existente = await this.query(`
+      SELECT id, visita_id, realizada FROM asignaciones_semanales
+      WHERE semana_inicio = $1 AND cliente_id = $2
+      LIMIT 1
+    `, [semanaInicio, clienteId]);
+
+    if (existente.rows.length > 0) {
+      const asignacion = existente.rows[0];
+      
+      // Si ya tiene visita o está realizada, no se puede modificar
+      if (asignacion.visita_id || asignacion.realizada) {
+        throw new Error('Este cliente ya tiene una asignación realizada para esta semana. No se puede modificar.');
+      }
+
+      // Actualizar la asignación existente
+      await this.query(`
+        UPDATE asignaciones_semanales
+        SET responsable_id = $1,
+            dia_atencion = $2,
+            precio = $3
+        WHERE id = $4
+      `, [responsableIdFinal, diaAtencionFinal, precioFinal, asignacion.id]);
+
+      return { id: asignacion.id, action: 'updated' };
+    } else {
+      // Crear nueva asignación
+      const result = await this.query(`
+        INSERT INTO asignaciones_semanales
+        (semana_inicio, cliente_id, responsable_id, dia_atencion, precio)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+      `, [semanaInicio, clienteId, responsableIdFinal, diaAtencionFinal, precioFinal]);
+
+      return { id: result.rows[0].id, action: 'created' };
+    }
   }
 
   async actualizarAsignacion(id, updates) {

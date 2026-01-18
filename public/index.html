@@ -508,7 +508,58 @@
         </div>
     </div>
 
-    <script src="app.js?v=10.0"></script>
+    <!-- Modal Asignar Cliente a Semana -->
+    <div id="asignar-cliente-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="app.closeModal('asignar-cliente-modal')">&times;</span>
+            <h2>Asignar Cliente a Semana</h2>
+            <form id="asignar-cliente-form" onsubmit="app.guardarAsignacionManual(event)">
+                <input type="hidden" id="asignar-cliente-id">
+                <div class="form-group">
+                    <label>Cliente</label>
+                    <input type="text" id="asignar-cliente-nombre" readonly style="background: #f5f5f5;">
+                </div>
+                <div class="form-group">
+                    <label>Semana (Lunes de la semana) *</label>
+                    <input type="date" id="asignar-cliente-semana" required>
+                    <small>Selecciona el lunes de la semana a asignar</small>
+                </div>
+                <div class="form-group">
+                    <label>Responsable</label>
+                    <select id="asignar-cliente-responsable">
+                        <option value="">Usar responsable del cliente</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Día de Atención</label>
+                    <select id="asignar-cliente-dia">
+                        <option value="">Usar día del cliente</option>
+                        <option value="Lunes">Lunes</option>
+                        <option value="Martes">Martes</option>
+                        <option value="Miércoles">Miércoles</option>
+                        <option value="Jueves">Jueves</option>
+                        <option value="Viernes">Viernes</option>
+                        <option value="Sábado">Sábado</option>
+                        <option value="Domingo">Domingo</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Precio</label>
+                    <input type="number" id="asignar-cliente-precio" placeholder="Usar precio del cliente">
+                    <small>Dejar vacío para usar el precio del cliente</small>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary"
+                        onclick="app.closeModal('asignar-cliente-modal')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Asignar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Validador de RUT chileno -->
+    <script src="rut-validator.js"></script>
+    <script src="app.js?v=10.1"></script>
 </body>
 
 </html>

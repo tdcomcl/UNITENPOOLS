@@ -12,6 +12,7 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const db = require('./database');
 const odoo = require('./odoo');
+const { validate: validateRut, clean: cleanRut } = require('rut.js');
 const mailer = require('./mailer');
 
 function shouldNotifyOdooError(visitaRow) {
@@ -529,28 +530,47 @@ app.post('/api/clientes', requireAuth, async (req, res) => {
     if (!nombre) {
       return res.status(400).json({ error: 'El nombre es obligatorio' });
     }
+
+    // Validar RUT del cliente si se proporciona
+    if (rut && rut.trim()) {
+      if (!validateRut(rut)) {
+        return res.status(400).json({ error: 'El RUT del cliente no es válido. Verifica el formato (ej: 12.345.678-9)' });
+      }
+    }
+
+    // Validar RUT de factura si es factura y se proporciona
+    if (documento_tipo === 'factura' && factura_rut && factura_rut.trim()) {
+      if (!validateRut(factura_rut)) {
+        return res.status(400).json({ error: 'El RUT de factura no es válido. Verifica el formato (ej: 12.345.678-9)' });
+      }
+    }
+
+    // Normalizar valores vacíos a null para PostgreSQL
+    // Limpiar RUTs antes de guardar (remover puntos y guiones, dejar solo números y dígito verificador)
+    const rutLimpio = rut && rut.trim() ? cleanRut(rut) : null;
+    const facturaRutLimpio = factura_rut && factura_rut.trim() ? cleanRut(factura_rut) : null;
     const id = await db.agregarCliente({
       nombre,
-      rut: rut || null,
-      direccion,
-      comuna,
-      celular,
-      email: email || null,
+      rut: rutLimpio,
+      direccion: (direccion && direccion.trim()) || null,
+      comuna: (comuna && comuna.trim()) || null,
+      celular: (celular && celular.trim()) || null,
+      email: (email && email.trim()) || null,
       documento_tipo: documento_tipo || 'invoice',
-      factura_razon_social: factura_razon_social || null,
-      factura_rut: factura_rut || null,
-      factura_giro: factura_giro || null,
-      factura_direccion: factura_direccion || null,
-      factura_comuna: factura_comuna || null,
-      factura_email: factura_email || null,
-      invoice_nombre: invoice_nombre || null,
-      invoice_tax_id: invoice_tax_id || null,
-      invoice_direccion: invoice_direccion || null,
-      invoice_comuna: invoice_comuna || null,
-      invoice_email: invoice_email || null,
-      invoice_pais: invoice_pais || null,
+      factura_razon_social: (factura_razon_social && factura_razon_social.trim()) || null,
+      factura_rut: facturaRutLimpio,
+      factura_giro: (factura_giro && factura_giro.trim()) || null,
+      factura_direccion: (factura_direccion && factura_direccion.trim()) || null,
+      factura_comuna: (factura_comuna && factura_comuna.trim()) || null,
+      factura_email: (factura_email && factura_email.trim()) || null,
+      invoice_nombre: (invoice_nombre && invoice_nombre.trim()) || null,
+      invoice_tax_id: (invoice_tax_id && invoice_tax_id.trim()) || null,
+      invoice_direccion: (invoice_direccion && invoice_direccion.trim()) || null,
+      invoice_comuna: (invoice_comuna && invoice_comuna.trim()) || null,
+      invoice_email: (invoice_email && invoice_email.trim()) || null,
+      invoice_pais: (invoice_pais && invoice_pais.trim()) || null,
       responsable_id: responsable_id || null,
-      dia_atencion: dia_atencion || null,
+      dia_atencion: (dia_atencion && dia_atencion.trim()) || null,
       precio_por_visita: precio_por_visita || 0
     });
     res.json({ id, success: true });
@@ -595,16 +615,34 @@ app.put('/api/clientes/:id(\\d+)', requireAuth, async (req, res) => {
       activo
     } = req.body;
 
+    // Validar RUT del cliente si se proporciona
+    if (rut && rut.trim()) {
+      if (!validateRut(rut)) {
+        return res.status(400).json({ error: 'El RUT del cliente no es válido. Verifica el formato (ej: 12.345.678-9)' });
+      }
+    }
+
+    // Validar RUT de factura si es factura y se proporciona
+    if (documento_tipo === 'factura' && factura_rut && factura_rut.trim()) {
+      if (!validateRut(factura_rut)) {
+        return res.status(400).json({ error: 'El RUT de factura no es válido. Verifica el formato (ej: 12.345.678-9)' });
+      }
+    }
+
+    // Limpiar RUTs antes de guardar
+    const rutLimpio = rut && rut.trim() ? cleanRut(rut) : undefined;
+    const facturaRutLimpio = factura_rut && factura_rut.trim() ? cleanRut(factura_rut) : undefined;
+
     const updates = {
       nombre,
-      rut,
+      rut: rutLimpio !== undefined ? rutLimpio : rut,
       direccion,
       comuna,
       celular,
       email,
       documento_tipo,
       factura_razon_social,
-      factura_rut,
+      factura_rut: facturaRutLimpio !== undefined ? facturaRutLimpio : factura_rut,
       factura_giro,
       factura_direccion,
       factura_comuna,
@@ -721,6 +759,52 @@ app.post('/api/asignaciones/asignar-semana-actual', requireAuth, async (req, res
     res.json({ semana: semanaActual, asignados, success: true });
   } catch (error) {
     console.error('[API] Error asignando semana:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Asignar manualmente un cliente a una semana específica
+app.post('/api/asignaciones/asignar-manual', requireAuth, async (req, res) => {
+  try {
+    if (!req.isAdmin) {
+      return res.status(403).json({ error: 'Solo administradores pueden asignar manualmente' });
+    }
+
+    const { cliente_id, semana_inicio, responsable_id, dia_atencion, precio } = req.body;
+
+    if (!cliente_id || !semana_inicio) {
+      return res.status(400).json({ error: 'cliente_id y semana_inicio son obligatorios' });
+    }
+
+    // Validar formato de fecha (YYYY-MM-DD)
+    const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!fechaRegex.test(semana_inicio)) {
+      return res.status(400).json({ error: 'semana_inicio debe tener formato YYYY-MM-DD' });
+    }
+
+    // Manejar tanto funciones síncronas (SQLite) como asíncronas (PostgreSQL)
+    let resultado;
+    if (typeof db.asignarClienteManual === 'function') {
+      const result = db.asignarClienteManual(
+        cliente_id,
+        semana_inicio,
+        responsable_id || null,
+        dia_atencion || null,
+        precio || null
+      );
+      resultado = result instanceof Promise ? await result : result;
+    } else {
+      throw new Error('Función asignarClienteManual no encontrada');
+    }
+
+    res.json({ 
+      success: true, 
+      asignacion_id: resultado.id,
+      action: resultado.action,
+      semana: semana_inicio
+    });
+  } catch (error) {
+    console.error('[API] Error asignando cliente manualmente:', error);
     res.status(500).json({ error: error.message });
   }
 });

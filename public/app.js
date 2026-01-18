@@ -557,6 +557,7 @@ const app = {
                     <td>$${formatearPrecio(cliente.precio_por_visita)}</td>
                     <td class="actions">
                         <button class="btn btn-sm btn-primary" onclick="app.editarCliente(${cliente.id})">Editar</button>
+                        <button class="btn btn-sm btn-info" onclick="app.asignarClienteManual(${cliente.id})" title="Asignar a semana específica">📅 Asignar</button>
                         <button class="btn btn-sm btn-success" onclick="app.abrirModalVisita(${cliente.id})">Registrar Visita</button>
                         <button class="btn btn-sm btn-danger" onclick="app.eliminarCliente(${cliente.id})">Eliminar</button>
                     </td>
@@ -592,6 +593,112 @@ const app = {
         } catch (e) {
             console.error(e);
             this.showToast(`Error eliminando cliente: ${e?.message || e}`, 'error', 5000);
+        }
+    },
+
+    asignarClienteManual(clienteId) {
+        const cliente = this.clientes.find(c => c.id === clienteId);
+        if (!cliente) {
+            alert('Cliente no encontrado');
+            return;
+        }
+
+        // Llenar el modal con datos del cliente
+        document.getElementById('asignar-cliente-id').value = cliente.id;
+        document.getElementById('asignar-cliente-nombre').value = cliente.nombre;
+
+        // Establecer semana actual por defecto (lunes de esta semana)
+        const hoy = new Date();
+        const day = hoy.getDay();
+        const diff = hoy.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(hoy.setDate(diff));
+        const semanaActual = monday.toISOString().split('T')[0];
+        document.getElementById('asignar-cliente-semana').value = semanaActual;
+
+        // Cargar responsables en el select
+        const responsableSelect = document.getElementById('asignar-cliente-responsable');
+        responsableSelect.innerHTML = '<option value="">Usar responsable del cliente</option>';
+        this.responsables.forEach(resp => {
+            const option = document.createElement('option');
+            option.value = resp.id;
+            option.textContent = resp.nombre;
+            if (cliente.responsable_id && resp.id === cliente.responsable_id) {
+                option.selected = true;
+            }
+            responsableSelect.appendChild(option);
+        });
+
+        // Establecer día de atención del cliente si existe
+        if (cliente.dia_atencion) {
+            document.getElementById('asignar-cliente-dia').value = cliente.dia_atencion;
+        }
+
+        // Establecer precio del cliente
+        if (cliente.precio_por_visita) {
+            document.getElementById('asignar-cliente-precio').value = cliente.precio_por_visita;
+        }
+
+        this.showModal('asignar-cliente-modal');
+    },
+
+    async guardarAsignacionManual(e) {
+        e.preventDefault();
+
+        const clienteId = parseInt(document.getElementById('asignar-cliente-id').value);
+        const semanaInicio = document.getElementById('asignar-cliente-semana').value;
+        const responsableId = document.getElementById('asignar-cliente-responsable').value || null;
+        const diaAtencion = document.getElementById('asignar-cliente-dia').value || null;
+        const precio = document.getElementById('asignar-cliente-precio').value 
+            ? parseFloat(document.getElementById('asignar-cliente-precio').value) 
+            : null;
+
+        if (!semanaInicio) {
+            alert('Debes seleccionar una semana');
+            return;
+        }
+
+        // Validar que sea un lunes
+        const fecha = new Date(semanaInicio);
+        if (fecha.getDay() !== 1) {
+            if (!confirm('La fecha seleccionada no es un lunes. ¿Deseas continuar de todas formas?')) {
+                return;
+            }
+        }
+
+        try {
+            this.showToast('Asignando cliente a semana...', 'info', 2000);
+            const res = await fetch(`${API_URL}/api/asignaciones/asignar-manual`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    cliente_id: clienteId,
+                    semana_inicio: semanaInicio,
+                    responsable_id: responsableId ? parseInt(responsableId) : null,
+                    dia_atencion: diaAtencion,
+                    precio: precio
+                })
+            });
+
+            if (res.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                this.showToast(`✅ Cliente asignado a la semana ${semanaInicio}`, 'success', 3000);
+                this.closeModal('asignar-cliente-modal');
+                // Recargar asignaciones si estamos en esa página
+                if (this.currentPage === 'asignaciones') {
+                    await this.cargarAsignaciones();
+                }
+            } else {
+                throw new Error(data.error || 'Error desconocido');
+            }
+        } catch (error) {
+            console.error('Error asignando cliente:', error);
+            this.showToast(`Error: ${error.message || 'Error desconocido'}`, 'error', 5000);
         }
     },
 
@@ -1321,13 +1428,30 @@ const app = {
     async guardarCliente(e) {
         e.preventDefault();
 
+        // Usar validador de RUT (disponible en rut-validator.js)
+        const rutValidate = window.rutjs?.validate;
+        const rutClean = window.rutjs?.clean;
+
         const documentoTipo = document.getElementById('cliente-documento-tipo')?.value || 'invoice';
         const rut = document.getElementById('cliente-rut')?.value?.trim() || '';
         const email = document.getElementById('cliente-email')?.value?.trim() || '';
         const direccion = document.getElementById('cliente-direccion')?.value?.trim() || '';
         const comuna = document.getElementById('cliente-comuna')?.value?.trim() || '';
 
-        // Por ahora: SIN campos obligatorios (se podrá validar más adelante al momento de emitir documentos)
+        // Validar RUT del cliente si se proporciona
+        if (rut) {
+            if (rutValidate && !rutValidate(rut)) {
+                alert('El RUT del cliente no es válido. Por favor, verifica el formato (ej: 12.345.678-9)');
+                return;
+            } else if (!rutValidate) {
+                // Validación básica si rut.js no está disponible
+                const rutPattern = /^[\d\.]+-[\dkK]$/;
+                if (!rutPattern.test(rut)) {
+                    alert('El RUT del cliente no tiene un formato válido. Debe ser como: 12.345.678-9');
+                    return;
+                }
+            }
+        }
 
         // Validaciones Factura / Invoice
         const factura_razon_social = document.getElementById('factura-razon-social')?.value?.trim() || '';
@@ -1337,23 +1461,36 @@ const app = {
         const factura_comuna = document.getElementById('factura-comuna')?.value?.trim() || '';
         const factura_email = document.getElementById('factura-email')?.value?.trim() || '';
 
-        // Por ahora: SIN campos obligatorios también para Factura (se validará al emitir)
+        // Validar RUT de factura si es factura y se proporciona
+        if (documentoTipo === 'factura' && factura_rut) {
+            if (rutValidate && !rutValidate(factura_rut)) {
+                alert('El RUT de factura no es válido. Por favor, verifica el formato (ej: 12.345.678-9)');
+                return;
+            } else if (!rutValidate) {
+                // Validación básica si rut.js no está disponible
+                const rutPattern = /^[\d\.]+-[\dkK]$/;
+                if (!rutPattern.test(factura_rut)) {
+                    alert('El RUT de factura no tiene un formato válido. Debe ser como: 12.345.678-9');
+                    return;
+                }
+            }
+        }
 
         const cliente = {
             nombre: document.getElementById('cliente-nombre').value,
             rut: rut || null,
-            direccion,
-            comuna,
-            celular: document.getElementById('cliente-celular').value,
+            direccion: direccion || null,
+            comuna: comuna || null,
+            celular: document.getElementById('cliente-celular').value || null,
             email: email || null,
             documento_tipo: documentoTipo,
             // Factura
-            factura_razon_social: documentoTipo === 'factura' ? factura_razon_social : null,
-            factura_rut: documentoTipo === 'factura' ? factura_rut : null,
-            factura_giro: documentoTipo === 'factura' ? factura_giro : null,
-            factura_direccion: documentoTipo === 'factura' ? factura_direccion : null,
-            factura_comuna: documentoTipo === 'factura' ? factura_comuna : null,
-            factura_email: documentoTipo === 'factura' ? factura_email : null,
+            factura_razon_social: (documentoTipo === 'factura' && factura_razon_social) ? factura_razon_social : null,
+            factura_rut: (documentoTipo === 'factura' && factura_rut) ? factura_rut : null,
+            factura_giro: (documentoTipo === 'factura' && factura_giro) ? factura_giro : null,
+            factura_direccion: (documentoTipo === 'factura' && factura_direccion) ? factura_direccion : null,
+            factura_comuna: (documentoTipo === 'factura' && factura_comuna) ? factura_comuna : null,
+            factura_email: (documentoTipo === 'factura' && factura_email) ? factura_email : null,
             // Operación
             responsable_id: document.getElementById('cliente-responsable').value || null,
             dia_atencion: Array.from(document.querySelectorAll('.day-check:checked')).map(cb => cb.value).join(',') || null,
@@ -1383,11 +1520,13 @@ const app = {
                 this.cargarClientes();
                 this.cargarEstadisticas();
             } else {
-                alert('Error al guardar el cliente');
+                const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }));
+                console.error('Error guardando cliente:', errorData);
+                alert('Error al guardar el cliente: ' + (errorData.error || 'Error desconocido'));
             }
         } catch (error) {
             console.error('Error guardando cliente:', error);
-            alert('Error al guardar el cliente');
+            alert('Error al guardar el cliente: ' + (error.message || 'Error desconocido'));
         }
     },
 
